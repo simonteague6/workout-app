@@ -25,9 +25,9 @@ React Native (Expo) → Zustand stores → SQLite (op-sqlite)
 ```
 src/
 ├── db/                  # SQLite schema, migrations, seed script, query functions
-│   ├── schema.sql       # Full CREATE TABLE statements with FK constraints
-│   ├── seed.sql         # Build-time: wrkout/exercises.json → INSERTs
-│   ├── migrations/      # Versioned schema changes
+│   ├── schema.sql       # Full CREATE TABLE statements with FK constraints (authoritative reference)
+│   ├── migrations/      # Versioned schema changes (0001_initial_schema.js + index.js)
+│   ├── seed/            # Build-time: wrkout/exercises.json → SQLite INSERTs (seed.js + exercises.json)
 │   └── queries/         # Reusable SQL: exerciseQueries, sessionQueries, routineQueries, analyticsQueries
 ├── stores/              # Zustand stores (workoutStore, exerciseStore, routineStore, settingsStore)
 ├── screens/             # Tab screens + stack screens
@@ -105,8 +105,10 @@ Test through public interfaces only — Zustand store actions and SQLite query f
 | `docs/agents/domain.md` | How agents consume domain docs |
 | `docs/agents/issue-tracker.md` | GitHub CLI conventions for issue operations |
 | `docs/agents/triage-labels.md` | Label mapping (`ready-for-agent`, `needs-triage`, etc.) |
-| `src/db/schema.sql` | Authoritative schema (to be created) |
-| `src/db/seed.sql` | Exercise seed data (to be created) |
+| `src/db/schema.sql` | Authoritative full schema (13 tables, FK constraints, indexes) |
+| `src/db/seed/seed.js` | Transforms wrkout `exercises.json` → SQLite INSERTs (idempotent) |
+| `src/db/seed/exercises.json` | Bundled wrkout exercise dataset (public domain, Unlicense) |
+| `src/utils/db.js` | DB adapter (op-sqlite on device / node:sqlite in tests) + migration runner |
 | `skills-lock.json` | Installed Matt Pocock skills manifest |
 
 ## Runtime/Tooling Preferences
