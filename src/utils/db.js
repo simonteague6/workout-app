@@ -142,11 +142,11 @@ export class NodeSqliteAdapter {
 export class OpSqliteAdapter {
   constructor(db) {
     this._db = db;
-    this._db.execute('PRAGMA foreign_keys = ON');
+    this._db.executeSync('PRAGMA foreign_keys = ON');
   }
 
   execute(sql, params = []) {
-    const r = this._db.execute(sql, params);
+    const r = this._db.executeSync(sql, params);
     return {
       rows: r.rows ?? [],
       rowsAffected: r.rowsAffected ?? 0,
@@ -155,22 +155,28 @@ export class OpSqliteAdapter {
   }
 
   executeBatch(statements) {
-    const commands = statements.map(({ sql, params }) =>
-      params && params.length ? [sql, params] : [sql],
-    );
-    const r = this._db.executeBatch(commands);
-    return { rowsAffected: r.rowsAffected ?? 0 };
+    let rowsAffected = 0;
+    for (const { sql, params = [] } of statements) {
+      const r = this._db.executeSync(sql, params);
+      rowsAffected += r.rowsAffected ?? 0;
+    }
+    return { rowsAffected };
   }
 
   transaction(fn) {
-    this._db.transaction(fn);
+    this._db.executeSync('BEGIN');
+    try {
+      fn();
+      this._db.executeSync('COMMIT');
+    } catch (err) {
+      try { this._db.executeSync('ROLLBACK'); } catch { /* already rolled back */ }
+      throw err;
+    }
   }
 
   exec(sql) {
-    // Run a multi-statement script by splitting; op-sqlite execute() is
-    // single-statement only.
     for (const stmt of splitStatements(sql)) {
-      this._db.execute(stmt, []);
+      this._db.executeSync(stmt, []);
     }
   }
 
