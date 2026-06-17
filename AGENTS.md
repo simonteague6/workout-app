@@ -20,8 +20,6 @@ React Native (Expo) → Zustand stores → SQLite (op-sqlite)
 - **AI**: Thin parsing layer. LLM returns JSON; app matches exercise names against database. AI never touches SQLite directly.
 - **Exercise suggestions**: `exercise_pair_frequency` counter table — zero AI, gets smarter with every workout.
 
-## Key Directories
-
 ```
 src/
 ├── db/                  # SQLite schema, migrations, seed script, query functions
@@ -36,9 +34,11 @@ src/
 │   ├── ProgressTab/     # ProgressScreen (charts, heatmap, PRs)
 │   └── MoreTab/         # MoreScreen, ExerciseLibrary, ExerciseDetail, AISettings, DataScreen
 ├── components/          # Shared UI: ExerciseCard, SetRow, RestTimer, AddExerciseModal, FinishScreen, RoutineBuilder, CalendarHeatmap
-├── ai/                  # aiClient (unified provider interface), routineImport (URL→JSON pipeline), instructionGenerate
-├── utils/               # db.js (connection + migration runner), seed.js, formatters (weight, date, duration)
-└── App.js               # Navigation container + store provider
+├── navigation/          # AppNavigator.js — bottom-tab + stack navigator setup
+├── ai/                  # (planned) aiClient, routineImport, instructionGenerate
+├── utils/               # db.js (connection + migration runner), formatters.js, secureStorage.js, theme.js
+├── theme.js             # Frozen color/spacing/radius design tokens
+└── App.js               # Root component: DB bootstrap, migration runner, navigation container
 ```
 
 ## Development Commands
@@ -124,8 +124,34 @@ Test through public interfaces only — Zustand store actions and SQLite query f
 
 ## Testing & QA
 
-### Framework
-Jest with `op-sqlite` in-memory mode for query tests. Stores tested as pure JS — no React dependency.
+Jest with `jest-expo` preset, `testEnvironment: "node"` for DB unit tests. In-memory SQLite via `node:sqlite` — no React dependency.
+
+### Test infrastructure helpers
+Located in `src/utils/db.js`:
+- `createInMemoryDb()` — fresh in-memory SQLite database per test
+- `initDatabase(db)` — runs schema + migrations on a database instance
+- `resetDatabaseForTesting(db)` — clears all rows between tests
+- `resetSecureStorageForTesting()` — clears in-memory secure storage map
+
+### Test files
+| File | What it covers |
+|------|---------------|
+| `src/stores/__tests__/workoutStore.test.js` | Free flow, add/complete sets, set type cycle, exercise CRUD, supersets, resume, finish |
+| `src/stores/__tests__/settingsStore.test.js` | Settings persistence, AI config, load on restart |
+| `src/stores/__tests__/exerciseStore.test.js` | Library load/search, filtering, sort by frequency, create/edit/archive, photos, history |
+| `src/db/__tests__/sessionQueries.test.js` | Session CRUD, exercise suggestions via pair frequency, set pre-fill, supersets, volume calc |
+| `src/db/__tests__/exerciseQueries.test.js` | Exercise lookup/search/sort, custom exercises, archive/unarchive, photo paths, history |
+| `src/db/__tests__/settingsQueries.test.js` | Read/write app_settings table |
+| `src/db/__tests__/portabilityQueries.test.js` | Export/import workout data |
+| `src/db/__tests__/migrationRunner.test.js` | Apply schemas in order, idempotency |
+| `src/db/__tests__/seed.test.js` | wrkout dataset seeding, field mappings, idempotency |
+| `src/utils/__tests__/formatters.test.js` | Weight conversion, rounding, display formatting |
+
+### Coverage gaps
+- `routineStore` — no dedicated test file (placeholder store)
+- `src/utils/db.js` — statement splitting, adapter logic not unit-tested (indirectly exercised via store/query tests)
+- `src/utils/theme.js` — theme resolution hook not unit-tested
+- `src/ai/` — no tests yet (module not implemented)
 
 ### TDD workflow
 Issues #3, #4, #5, #6 require TDD. Agents read `skill://tdd` before starting. Red-green-refactor per acceptance criterion. Never write all tests upfront.
@@ -135,6 +161,7 @@ Issues #3, #4, #5, #6 require TDD. Agents read `skill://tdd` before starting. Re
 - **Query functions**: given database state → correct return values
 - **AI pipeline**: given mocked LLM response → correct parsing + matching
 - **Seed script**: given JSON → correct row count + field mappings
+- **Formatters**: given raw values → correct display output
 
 ### What NOT to test
 - UI rendering, navigation transitions, component layout
