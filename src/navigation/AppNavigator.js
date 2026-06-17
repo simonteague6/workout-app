@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Text } from 'react-native';
 
 import StartScreen from '../screens/WorkoutTab/StartScreen.js';
+import LiveSession from '../screens/WorkoutTab/LiveSession.js';
+import FinishScreen from '../screens/WorkoutTab/FinishScreen.js';
 import CalendarScreen from '../screens/HistoryTab/CalendarScreen.js';
 import ProgressScreen from '../screens/ProgressTab/ProgressScreen.js';
 import MoreScreen from '../screens/MoreTab/MoreScreen.js';
@@ -28,6 +30,22 @@ function WorkoutStack() {
         name="Start"
         component={StartScreen}
         options={{ title: 'Workout', headerShown: false }}
+      />
+      <Stack.Screen
+        name="LiveSession"
+        component={LiveSession}
+        options={{ title: 'Workout', headerShown: false }}
+      />
+      <Stack.Screen
+        name="Finish"
+        component={FinishScreen}
+        options={{ title: 'Workout complete', headerBackTitle: 'Back' }}
+      />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ title: 'Exercise' }} />
+      <Stack.Screen
+        name="ExerciseEditor"
+        component={ExerciseEditorScreen}
+        options={({ route }) => ({ title: route.params?.exerciseId ? 'Edit exercise' : 'New exercise' })}
       />
     </Stack.Navigator>
   );

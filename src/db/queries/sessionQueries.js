@@ -15,12 +15,6 @@
 
 const SET_TYPES = new Set(['normal', 'warmup', 'dropset', 'failure']);
 
-/** Current UTC timestamp in the schema's ISO-8601 TEXT format. */
-function nowIso() {
-  // Delegates to SQLite so the value matches the DEFAULT used by started_at /
-  // created_at — keeps comparisons consistent with rows written by the DB.
-  return "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
-}
 
 // ---------------------------------------------------------------------------
 // Session lifecycle
@@ -182,6 +176,40 @@ export function getPreviousSetForExercise(db, exerciseId) {
     [exerciseId],
   );
   return rows[0] ? { weight: rows[0].weight, reps: rows[0].reps } : null;
+}
+
+/**
+ * All sets of the most recent prior session that used an exercise, ordered by
+ * sort_order. Drives the "previous column" shown beside each set row. Pass
+ * excludeSessionId to ignore the current session. Returns [] when no history.
+ * @returns {{ weight: number|null, reps: number|null, set_type: string, sort_order: number }[]}
+ */
+export function getLastSessionSetsForExercise(db, exerciseId, { excludeSessionId = null } = {}) {
+  const conds = ['we.exercise_id = ?'];
+  const params = [exerciseId];
+  if (excludeSessionId != null) {
+    conds.push('we.session_id != ?');
+    params.push(excludeSessionId);
+  }
+  const session = db.execute(
+    `SELECT ws.id AS sid
+       FROM workout_session ws
+       JOIN workout_exercise we ON we.session_id = ws.id
+      WHERE ${conds.join(' AND ')}
+      ORDER BY ws.started_at DESC
+      LIMIT 1`,
+    params,
+  ).rows[0];
+  if (!session) return [];
+  const { rows } = db.execute(
+    `SELECT es.weight, es.reps, es.set_type, es.sort_order
+       FROM exercise_set es
+       JOIN workout_exercise we ON we.id = es.workout_exercise_id
+      WHERE we.session_id = ? AND we.exercise_id = ?
+      ORDER BY es.sort_order`,
+    [session.sid, exerciseId],
+  );
+  return rows;
 }
 
 /**
@@ -486,4 +514,44 @@ export function getSessionStats(db, sessionId) {
     setCount: counts.set_count,
     exerciseCount: counts.exercise_count,
   };
+}
+
+/**
+ * Save a free-flow session as a reusable routine: create a routine row + one
+ * routine_exercise per workout_exercise, with target sets/reps derived from
+ * the session's completed sets. Returns the new routine id. (Free-flow finish
+ * screen "save as template" — routines are fully built out in issue #4.)
+ * @param {import('../../utils/db.js').DbAdapter} db
+ * @param {number} sessionId
+ * @param {string} name
+ * @returns {number} routine id
+ */
+export function saveSessionAsTemplate(db, sessionId, name) {
+  let routineId;
+  db.transaction(() => {
+    const { rows } = db.execute(`INSERT INTO routine (name) VALUES (?) RETURNING id`, [name]);
+    routineId = rows[0].id;
+    const exercises = db.execute(
+      `SELECT we.id, we.exercise_id, we.sort_order
+         FROM workout_exercise we WHERE we.session_id = ? ORDER BY we.sort_order`,
+      [sessionId],
+    ).rows;
+    exercises.forEach((we) => {
+      const sets = db.execute(
+        `SELECT weight, reps FROM exercise_set WHERE workout_exercise_id = ? AND is_completed = 1
+          ORDER BY sort_order`,
+        [we.id],
+      ).rows;
+      const targetSets = sets.length;
+      const repsMin = sets.length ? Math.min(...sets.map((s) => s.reps ?? 0)) : 5;
+      const repsMax = sets.length ? Math.max(...sets.map((s) => s.reps ?? 0)) : 12;
+      db.execute(
+        `INSERT INTO routine_exercise
+           (routine_id, exercise_id, sort_order, target_sets, target_reps_min, target_reps_max)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [routineId, we.exercise_id, we.sort_order, Math.max(1, targetSets), repsMin, repsMax],
+      );
+    });
+  });
+  return routineId;
 }

@@ -56,14 +56,13 @@ function hydrateActiveSession(db, sessionId) {
     exercise: getExerciseById(db, we.exercise_id) ?? { id: we.exercise_id, name: we.name },
     sets: we.sets,
     supersetGroupId: we.supersetGroupId ?? null,
+    previousSets: sessionQueries.getLastSessionSetsForExercise(db, we.exercise_id, {
+      excludeSessionId: sessionId,
+    }),
   }));
   return { ...detail, exercises };
 }
 
-// Find a workout_exercise entry by id within the active session.
-function findEntry(state, workoutExerciseId) {
-  return state.activeSession?.exercises.find((e) => e.id === workoutExerciseId) ?? null;
-}
 
 // Find a set entry plus its owning exercise entry by set id.
 function findSet(state, setId) {
@@ -191,7 +190,15 @@ export const useWorkoutStore = create((set, get) => ({
     if (!session) throw new Error('workoutStore.addExercise: no active session');
     const we = sessionQueries.addWorkoutExercise(db, { sessionId: session.id, exerciseId });
     const exercise = getExerciseById(db, exerciseId);
-    const entry = { ...we, exercise, sets: [], supersetGroupId: null };
+    const entry = {
+      ...we,
+      exercise,
+      sets: [],
+      supersetGroupId: null,
+      previousSets: sessionQueries.getLastSessionSetsForExercise(db, exerciseId, {
+        excludeSessionId: session.id,
+      }),
+    };
     set((state) => ({
       activeSession: { ...state.activeSession, exercises: [...state.activeSession.exercises, entry] },
     }));
@@ -205,6 +212,15 @@ export const useWorkoutStore = create((set, get) => ({
     sessionQueries.substituteExercise(db, workoutExerciseId, newExerciseId);
     set({ activeSession: hydrateActiveSession(db, session.id) });
     return get().activeSession;
+  },
+
+  /** Pair-frequency-sorted exercise suggestions for the add-exercise modal.
+   *  The last exercise added to the active session seeds the pair ranking. */
+  suggestExercises: (query = '') => {
+    const db = getDatabase();
+    const ex = get().activeSession?.exercises ?? [];
+    const lastExerciseId = ex.length ? ex[ex.length - 1].exercise_id : null;
+    return sessionQueries.getExerciseSuggestions(db, { lastExerciseId, query });
   },
 
   /** Remove a workout_exercise (cascades to its sets + superset membership). */
@@ -356,17 +372,26 @@ export const useWorkoutStore = create((set, get) => ({
     if (!session) throw new Error('workoutStore.finishWorkout: no active session');
     sessionQueries.finishSession(db, session.id, { bodyWeight, notes });
     const stats = sessionQueries.getSessionStats(db, session.id);
+    const withId = { ...stats, sessionId: session.id };
     set({
       activeSession: null,
       restTimerEndsAt: null,
       restTimerTotalSeconds: 0,
-      lastSessionStats: stats,
+      lastSessionStats: withId,
     });
-    return stats;
+    return withId;
   },
 
   /** Clear the finished-session stats (after the finish screen dismisses). */
   dismissFinished: () => set({ lastSessionStats: null }),
+
+  /** Save the just-finished free-flow session as a routine template. Returns
+   *  the new routine id. Call after finishWorkout (uses lastSessionStats' session
+   *  id is gone, so pass the finished session id explicitly). */
+  saveAsTemplate: async (sessionId, name) => {
+    const db = getDatabase();
+    return sessionQueries.saveSessionAsTemplate(db, sessionId, name);
+  },
 
   /** Drop the in-memory active session without finishing (abandon). */
   clearActiveSession: () =>

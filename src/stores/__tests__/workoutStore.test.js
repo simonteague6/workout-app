@@ -159,7 +159,7 @@ describe('workoutStore — completeSet + rest timer', () => {
     const bench = findExercise(db, 'Barbell Bench Press');
     await useWorkoutStore.getState().startFreeFlow();
     const we = await useWorkoutStore.getState().addExercise(bench.id);
-    const s1 = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().addSet(we.id);
     const s2 = await useWorkoutStore.getState().addSet(we.id);
     const s3 = await useWorkoutStore.getState().addSet(we.id);
     // s2 and s3 are drop sets (a drop group of 2).
