@@ -8,7 +8,6 @@ import {
   createSession,
   addWorkoutExercise,
   addSet,
-  completeSet,
   finishSession,
 } from '../queries/sessionQueries.js';
 
@@ -76,7 +75,7 @@ afterEach(() => db.close());
 describe('routineQueries — folders', () => {
   it('createFolder inserts a folder and returns it; getFolders lists by sort_order', () => {
     const a = routineQueries.createFolder(db, 'Push Pull Legs');
-    const b = routineQueries.createFolder(db, 'Upper Lower');
+    routineQueries.createFolder(db, 'Upper Lower');
     expect(a.id).toBeGreaterThan(0);
     expect(a.name).toBe('Push Pull Legs');
     const folders = routineQueries.getFolders(db);
@@ -230,7 +229,6 @@ describe('routineQueries — edit + reorder + move + delete', () => {
 describe('routineQueries — routine preview (last session performance)', () => {
   it('getRoutinePreview returns each exercise + the last completed session that used it', () => {
     const bench = findExercise(db, 'Barbell Bench Press');
-    const curl = findExercise(db, 'Barbell Curl');
     // Two prior sessions for bench: older then newer.
     logPriorSession(db, bench.id, [{ weight: 80, reps: 8 }, { weight: 80, reps: 6 }], {
       startedAt: '2025-01-01T00:00:00.000Z',
@@ -262,7 +260,6 @@ describe('routineQueries — routine vs session diff', () => {
     const detail = routineQueries.getRoutineDetail(db, routineId);
     const session = createSession(db, { routineId });
     const sessionId = session.id;
-    const reById = new Map(detail.exercises.map((re) => [re.id, re]));
     detail.exercises.forEach((re) => {
       if (skip.includes(re.id)) return;
       const sub = substitutions.find((s) => s.fromReId === re.id);
@@ -318,7 +315,6 @@ describe('routineQueries — routine vs session diff', () => {
   });
 
   it('flags added exercises that were not part of the routine', () => {
-    const bench = findExercise(db, 'Barbell Bench Press');
     const squat = findExercise(db, 'Barbell Squat');
     const routine = routineQueries.createRoutine(db, {
       name: 'Push A',
