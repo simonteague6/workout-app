@@ -405,7 +405,7 @@ export const useWorkoutStore = create((set, get) => ({
     if (!session) throw new Error('workoutStore.finishWorkout: no active session');
     sessionQueries.finishSession(db, session.id, { bodyWeight, notes });
     const stats = sessionQueries.getSessionStats(db, session.id);
-    const withId = { ...stats, sessionId: session.id };
+    const withId = { ...stats, sessionId: session.id, routineId: session.routine_id ?? null };
     set({
       activeSession: null,
       restTimerEndsAt: null,

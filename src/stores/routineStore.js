@@ -160,4 +160,15 @@ export const useRoutineStore = create((set, get) => ({
     set({ routines: refreshRoutines() });
     return routine;
   },
+
+  /**
+   * Update an existing routine so its routine_exercise rows match today's
+   * session (the finish screen "Update template" path, PRD story 26). Returns
+   * the updated routine detail.
+   */
+  updateTemplateFromSession: async (routineId, sessionId) => {
+    const detail = routineQueries.updateRoutineFromSession(getDatabase(), routineId, sessionId);
+    set({ routines: refreshRoutines() });
+    return detail;
+  },
 }));
