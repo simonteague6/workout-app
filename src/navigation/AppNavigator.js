@@ -7,6 +7,10 @@ import StartScreen from '../screens/WorkoutTab/StartScreen.js';
 import CalendarScreen from '../screens/HistoryTab/CalendarScreen.js';
 import ProgressScreen from '../screens/ProgressTab/ProgressScreen.js';
 import MoreScreen from '../screens/MoreTab/MoreScreen.js';
+import ExerciseLibraryScreen from '../screens/MoreTab/ExerciseLibraryScreen.js';
+import ExerciseDetailScreen from '../screens/MoreTab/ExerciseDetailScreen.js';
+import ExerciseEditorScreen from '../screens/MoreTab/ExerciseEditorScreen.js';
+import ExerciseHistoryScreen from '../screens/HistoryTab/ExerciseHistoryScreen.js';
 
 const BottomTab = createBottomTabNavigator();
 
@@ -19,7 +23,7 @@ function WorkoutStack() {
       <Stack.Screen
         name="Start"
         component={StartScreen}
-        options={{ title: 'Workout' }}
+        options={{ title: 'Workout', headerShown: false }}
       />
     </Stack.Navigator>
   );
@@ -29,10 +33,18 @@ function HistoryStack() {
   const Stack = createNativeStackNavigator();
   return (
     <Stack.Navigator>
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'History', headerShown: false }} />
+      <Stack.Screen name="ExerciseLibrary" component={ExerciseLibraryScreen} options={{ title: 'Exercise Library' }} />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ title: 'Exercise' }} />
       <Stack.Screen
-        name="Calendar"
-        component={CalendarScreen}
-        options={{ title: 'History' }}
+        name="ExerciseEditor"
+        component={ExerciseEditorScreen}
+        options={({ route }) => ({ title: route.params?.exerciseId ? 'Edit exercise' : 'New exercise' })}
+      />
+      <Stack.Screen
+        name="ExerciseHistory"
+        component={ExerciseHistoryScreen}
+        options={({ route }) => ({ title: route.params?.exerciseName ?? 'Exercise history' })}
       />
     </Stack.Navigator>
   );
@@ -45,7 +57,7 @@ function ProgressStack() {
       <Stack.Screen
         name="Progress"
         component={ProgressScreen}
-        options={{ title: 'Progress' }}
+        options={{ title: 'Progress', headerShown: false }}
       />
     </Stack.Navigator>
   );
@@ -55,7 +67,19 @@ function MoreStack() {
   const Stack = createNativeStackNavigator();
   return (
     <Stack.Navigator>
-      <Stack.Screen name="More" component={MoreScreen} options={{ title: 'More' }} />
+      <Stack.Screen name="More" component={MoreScreen} options={{ title: 'More', headerShown: false }} />
+      <Stack.Screen name="ExerciseLibrary" component={ExerciseLibraryScreen} options={{ title: 'Exercise Library' }} />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} options={{ title: 'Exercise' }} />
+      <Stack.Screen
+        name="ExerciseEditor"
+        component={ExerciseEditorScreen}
+        options={({ route }) => ({ title: route.params?.exerciseId ? 'Edit exercise' : 'New exercise' })}
+      />
+      <Stack.Screen
+        name="ExerciseHistory"
+        component={ExerciseHistoryScreen}
+        options={({ route }) => ({ title: route.params?.exerciseName ?? 'Exercise history' })}
+      />
     </Stack.Navigator>
   );
 }
