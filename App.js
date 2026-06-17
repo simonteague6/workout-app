@@ -6,6 +6,8 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator.js';
 import { initDatabase } from './src/utils/db.js';
 import { seedExercises } from './src/db/seed/seed.js';
+import { useSettingsStore } from './src/stores/settingsStore.js';
+import { useAppTheme } from './src/utils/theme.js';
 
 // Opens the database, runs pending migrations, and seeds the exercise library
 // on first launch. The live workout session and other stores read from the
@@ -13,10 +15,15 @@ import { seedExercises } from './src/db/seed/seed.js';
 async function bootstrap() {
   const db = initDatabase();
   seedExercises(db);
+  // Hydrate persisted settings (theme, units, defaults, AI config) so they
+  // survive an app restart — the keystore-backed API key is read here too.
+  await useSettingsStore.getState().loadSettings();
 }
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  // Called unconditionally (before the early return) so hook order is stable.
+  const { resolved } = useAppTheme();
 
   useEffect(() => {
     let mounted = true;
@@ -45,7 +52,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppNavigator />
-      <StatusBar style="auto" />
+      <StatusBar style={resolved === 'dark' ? 'light' : 'dark'} />
     </SafeAreaProvider>
   );
 }

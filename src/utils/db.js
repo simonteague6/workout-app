@@ -185,7 +185,6 @@ export class OpSqliteAdapter {
 // ---------------------------------------------------------------------------
 function requireOpSqlite() {
   // Lazily require so Node (which cannot load the native module) never imports it.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('@op-engineering/op-sqlite');
 }
 
@@ -194,7 +193,6 @@ function loadNodeSqlite() {
   // React Native bundle, metro.config.js redirects `node:sqlite` to a stub
   // (src/utils/rn-stubs/node-sqlite.js) so Metro can bundle db.js; the stub is
   // never executed on device because op-sqlite loads successfully first.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('node:sqlite');
 }
 
@@ -205,7 +203,7 @@ export function openDatabase({ name = 'workout.db', location } = {}) {
     const { open } = requireOpSqlite();
     const db = open({ name, location: location ?? 'databases' });
     return new OpSqliteAdapter(db);
-  } catch (err) {
+  } catch {
     // Node path: in-memory for tests, file by name for build scripts.
     const { DatabaseSync } = loadNodeSqlite();
     const target = location === ':memory:' || name === ':memory:' ? ':memory:' : name;

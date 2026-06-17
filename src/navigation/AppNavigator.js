@@ -1,4 +1,4 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Text } from 'react-native';
@@ -7,6 +7,10 @@ import StartScreen from '../screens/WorkoutTab/StartScreen.js';
 import CalendarScreen from '../screens/HistoryTab/CalendarScreen.js';
 import ProgressScreen from '../screens/ProgressTab/ProgressScreen.js';
 import MoreScreen from '../screens/MoreTab/MoreScreen.js';
+import AppearanceSettings from '../screens/MoreTab/AppearanceSettings.js';
+import AISettings from '../screens/MoreTab/AISettings.js';
+import DataScreen from '../screens/MoreTab/DataScreen.js';
+import { useAppTheme } from '../utils/theme.js';
 
 const BottomTab = createBottomTabNavigator();
 
@@ -56,6 +60,9 @@ function MoreStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="More" component={MoreScreen} options={{ title: 'More' }} />
+      <Stack.Screen name="Appearance" component={AppearanceSettings} options={{ title: 'Appearance' }} />
+      <Stack.Screen name="AISettings" component={AISettings} options={{ title: 'AI & API Keys' }} />
+      <Stack.Screen name="Data" component={DataScreen} options={{ title: 'Data' }} />
     </Stack.Navigator>
   );
 }
@@ -74,8 +81,23 @@ function screenOptions({ route }) {
 }
 
 export default function AppNavigator() {
+  const { resolved, colors } = useAppTheme();
+  const base = resolved === 'dark' ? DarkTheme : DefaultTheme;
+  // Tint React Navigation's theme with our palette so the nav chrome (tab
+  // bar + stack headers) follows the user's theme preference.
+  const theme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      primary: colors.accent,
+    },
+  };
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={theme}>
       <BottomTab.Navigator screenOptions={screenOptions}>
         <BottomTab.Screen name="WorkoutTab" component={WorkoutStack} options={{ tabBarLabel: 'Workout' }} />
         <BottomTab.Screen name="HistoryTab" component={HistoryStack} options={{ tabBarLabel: 'History' }} />
