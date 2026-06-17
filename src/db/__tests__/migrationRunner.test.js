@@ -10,6 +10,7 @@ import {
   splitStatements,
   LATEST_SCHEMA_VERSION,
 } from '../../utils/db.js';
+import { migrations } from '../../db/migrations/index.js';
 
 const EXPECTED_TABLES = [
   'muscle_group',
@@ -25,6 +26,7 @@ const EXPECTED_TABLES = [
   'superset_member',
   'exercise_pair_frequency',
   'body_measurement',
+  'app_settings',
   'schema_migrations',
 ];
 
@@ -50,10 +52,10 @@ describe('migration runner', () => {
     const db = createInMemoryDb();
     expect(getCurrentVersion(db)).toBe(LATEST_SCHEMA_VERSION);
     const { rows } = db.execute('SELECT version, name FROM schema_migrations');
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(migrations.length);
     expect(rows[0].version).toBe(1);
     expect(rows[0].name).toBe('initial_schema');
-    db.close();
+    expect(rows[rows.length - 1].version).toBe(LATEST_SCHEMA_VERSION);
   });
 
   it('is idempotent — re-running with no new migrations is a no-op', () => {
@@ -62,9 +64,9 @@ describe('migration runner', () => {
     const result = runMigrations(db);
     expect(result).toBe(before);
     expect(getCurrentVersion(db)).toBe(before);
-    // schema_migrations should still have exactly one row
+    // re-running with no new migrations leaves the row count unchanged
     const { rows } = db.execute('SELECT COUNT(*) AS c FROM schema_migrations');
-    expect(rows[0].c).toBe(1);
+    expect(rows[0].c).toBe(migrations.length);
     db.close();
   });
 
@@ -117,6 +119,7 @@ describe('migration runner', () => {
   it('keeps migration 0001 in sync with schema.sql (drift guard)', () => {
     // Apply schema.sql directly via node:sqlite exec (multi-statement).
     const raw = new DatabaseSync(':memory:');
+    // eslint-disable-next-line no-undef -- __dirname is a Node global; the RN eslint env doesn't define it.
     raw.exec(fs.readFileSync(path.resolve(__dirname, '../schema.sql'), 'utf8'));
     const rawTables = raw
       .prepare(

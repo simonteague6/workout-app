@@ -222,6 +222,19 @@ CREATE TABLE IF NOT EXISTS body_measurement (
 CREATE INDEX IF NOT EXISTS idx_body_measurement_date ON body_measurement(date);
 
 -- ---------------------------------------------------------------------------
+-- App settings (key/value, non-secret only)
+-- ---------------------------------------------------------------------------
+-- Persists theme, unit, default rest timer, default increment, and the AI
+-- provider/model/endpoint. The AI API key is intentionally NOT stored here —
+-- secrets live in the device keystore via expo-secure-store.
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- ---------------------------------------------------------------------------
 -- Migration bookkeeping
 -- ---------------------------------------------------------------------------
 
