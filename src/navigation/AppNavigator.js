@@ -84,7 +84,6 @@ function MoreStack() {
         component={ExerciseHistoryScreen}
         options={({ route }) => ({ title: route.params?.exerciseName ?? 'Exercise history' })}
       />
-      <Stack.Screen name="More" component={MoreScreen} options={{ title: 'More' }} />
       <Stack.Screen name="Appearance" component={AppearanceSettings} options={{ title: 'Appearance' }} />
       <Stack.Screen name="AISettings" component={AISettings} options={{ title: 'AI & API Keys' }} />
       <Stack.Screen name="Data" component={DataScreen} options={{ title: 'Data' }} />
