@@ -19,7 +19,8 @@ function formatLast(sets, unit) {
   if (!sets || sets.length === 0) return 'No history';
   return sets
     .map((s) => {
-      const w = s.weight == null ? '—' : kgToDisplay(s.weight, unit);
+      if (s.weight == null) return `—×${s.reps ?? '—'}`;
+      const w = kgToDisplay(s.weight, unit);
       return `${Number.isInteger(w) ? w : w.toFixed(1)}×${s.reps ?? '—'}`;
     })
     .join('  ');
