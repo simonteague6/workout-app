@@ -20,7 +20,7 @@ export default function LiveSession({ navigation }) {
   const activeSession = useWorkoutStore((s) => s.activeSession);
   const addExercise = useWorkoutStore((s) => s.addExercise);
   const addSet = useWorkoutStore((s) => s.addSet);
-  const completeSet = useWorkoutStore((s) => s.completeSet);
+  const toggleCompleteSet = useWorkoutStore((s) => s.toggleCompleteSet);
   const cycleSetType = useWorkoutStore((s) => s.cycleSetType);
   const updateSetFields = useWorkoutStore((s) => s.updateSetFields);
   const deleteSet = useWorkoutStore((s) => s.deleteSet);
@@ -139,7 +139,7 @@ export default function LiveSession({ navigation }) {
               index={i}
               totalExercises={activeSession.exercises.length}
               onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
-              onCompleteSet={(setId) => completeSet(setId)}
+              onCompleteSet={(setId) => toggleCompleteSet(setId)}
               onCycleType={(setId) => cycleSetType(setId)}
               onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
               onAddSet={(weId) => addSet(weId)}

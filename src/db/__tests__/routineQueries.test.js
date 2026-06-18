@@ -264,17 +264,29 @@ describe('routineQueries — routine vs session diff', () => {
       if (skip.includes(re.id)) return;
       const sub = substitutions.find((s) => s.fromReId === re.id);
       const exerciseId = sub ? sub.exerciseId : re.exercise_id;
-      db.execute(
+      const { rows } = db.execute(
         `INSERT INTO workout_exercise
            (session_id, exercise_id, sort_order, substituted_from_routine_exercise_id)
          VALUES (?, ?, ?, ?) RETURNING id`,
         [sessionId, exerciseId, re.sort_order, re.id],
       );
+      // Add one completed set so the exercise counts as "performed" in the diff.
+      db.execute(
+        `INSERT INTO exercise_set (workout_exercise_id, sort_order, weight, reps, is_completed)
+         VALUES (?, 0, 50, 8, 1)`,
+        [rows[0].id],
+      );
     });
     extras.forEach((ex) => {
-      db.execute(
-        `INSERT INTO workout_exercise (session_id, exercise_id, sort_order) VALUES (?, ?, ?)`,
+      const { rows } = db.execute(
+        `INSERT INTO workout_exercise (session_id, exercise_id, sort_order) VALUES (?, ?, ?) RETURNING id`,
         [sessionId, ex.exerciseId, 99 + ex.exerciseId],
+      );
+      // Add one completed set so the extra shows as "added" in the diff.
+      db.execute(
+        `INSERT INTO exercise_set (workout_exercise_id, sort_order, weight, reps, is_completed)
+         VALUES (?, 0, 40, 10, 1)`,
+        [rows[0].id],
       );
     });
     return sessionId;
@@ -328,6 +340,25 @@ describe('routineQueries — routine vs session diff', () => {
     expect(added).toBeDefined();
     expect(added.exerciseId).toBe(squat.id);
     expect(added.exerciseName).toBe('Barbell Squat');
+  });
+
+  it('marks a pre-loaded exercise with zero completed sets as skipped', () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const routine = routineQueries.createRoutine(db, {
+      name: 'Push A',
+      exercises: buildRoutineInput(db, [{ exercise: 'Barbell Bench Press' }]),
+    });
+    const detail = routineQueries.getRoutineDetail(db, routine.id);
+    // Start from routine: workout_exercise is created with origin link, but no sets completed.
+    const sessionId = createSession(db, { routineId: routine.id }).id;
+    db.execute(
+      `INSERT INTO workout_exercise (session_id, exercise_id, sort_order, substituted_from_routine_exercise_id)
+       VALUES (?, ?, 0, ?)`,
+      [sessionId, bench.id, detail.exercises[0].id],
+    );
+    const diff = routineQueries.getRoutineSessionDiff(db, routine.id, sessionId);
+    expect(diff.filter((d) => d.type === 'matched')).toHaveLength(0);
+    expect(diff.filter((d) => d.type === 'skipped')).toHaveLength(1);
   });
 });
 
@@ -395,5 +426,52 @@ describe('routineQueries — save-as-new + update-template-from-session', () => 
     expect(detail.exercises[0].target_reps_max).toBe(10);
     expect(detail.exercises[1].exercise_id).toBe(squat.id);
     expect(detail.exercises[1].target_sets).toBe(2);
+  });
+
+  it('updateRoutineFromSession preserves skipped exercises with original targets', () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const squat = findExercise(db, 'Barbell Squat');
+    const curl = findExercise(db, 'Barbell Curl');
+    const routine = routineQueries.createRoutine(db, {
+      name: 'Push A',
+      exercises: buildRoutineInput(db, [
+        { exercise: 'Barbell Bench Press', targetSets: 3, repsMin: 5, repsMax: 8 },
+        { exercise: 'Barbell Squat', targetSets: 5, repsMin: 5, repsMax: 5 },
+        { exercise: 'Barbell Curl', targetSets: 3, repsMin: 10, repsMax: 12 },
+      ]),
+    });
+    const detail = routineQueries.getRoutineDetail(db, routine.id);
+    const squatRe = detail.exercises.find((e) => e.exercise_id === squat.id);
+    // Session: bench done (2 sets), squat pre-loaded but no sets completed, curl skipped entirely.
+    const sessionId = logCompletedSession(db, [
+      { exerciseId: bench.id, sets: [{ weight: 80, reps: 5 }, { weight: 85, reps: 5 }] },
+    ]);
+    // Add squat workout_exercise with origin link but no completed sets.
+    db.execute(
+      `INSERT INTO workout_exercise (session_id, exercise_id, sort_order, substituted_from_routine_exercise_id)
+       VALUES (?, ?, 1, ?)`,
+      [sessionId, squat.id, squatRe.id],
+    );
+    // curl has no workout_exercise at all.
+
+    routineQueries.updateRoutineFromSession(db, routine.id, sessionId);
+    const after = routineQueries.getRoutineDetail(db, routine.id);
+    // All 3 exercises preserved.
+    expect(after.exercises).toHaveLength(3);
+    // Bench updated to today's actuals.
+    const benchRow = after.exercises.find((e) => e.exercise_id === bench.id);
+    expect(benchRow.target_sets).toBe(2);
+    expect(benchRow.target_reps_min).toBe(5);
+    expect(benchRow.target_reps_max).toBe(5);
+    // Squat: pre-loaded but not performed → original targets kept.
+    const squatRow = after.exercises.find((e) => e.exercise_id === squat.id);
+    expect(squatRow.target_sets).toBe(5);
+    expect(squatRow.target_reps_min).toBe(5);
+    expect(squatRow.target_reps_max).toBe(5);
+    // Curl: not in session at all → original targets kept.
+    const curlRow = after.exercises.find((e) => e.exercise_id === curl.id);
+    expect(curlRow.target_sets).toBe(3);
+    expect(curlRow.target_reps_min).toBe(10);
+    expect(curlRow.target_reps_max).toBe(12);
   });
 });

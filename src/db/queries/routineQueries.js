@@ -275,10 +275,13 @@ export function getRoutineSessionDiff(db, routineId, sessionId) {
   if (!routine) return [];
   const routineExercises = routine.exercises;
 
+  // Session workout_exercises, with a count of completed sets per row.
   const sessionRows = db
     .execute(
       `SELECT we.id, we.exercise_id, we.substituted_from_routine_exercise_id,
-              e.name AS exercise_name
+              e.name AS exercise_name,
+              (SELECT COUNT(*) FROM exercise_set es
+                WHERE es.workout_exercise_id = we.id AND es.is_completed = 1) AS completed_sets
          FROM workout_exercise we
          JOIN exercise e ON e.id = we.exercise_id
         WHERE we.session_id = ?
@@ -298,14 +301,15 @@ export function getRoutineSessionDiff(db, routineId, sessionId) {
   const diff = [];
   for (const re of routineExercises) {
     const we = byOrigin.get(re.id);
-    if (!we) {
+    if (!we || we.completed_sets === 0) {
+      // No workout_exercise at all, or pre-loaded but zero sets completed → skipped.
       diff.push({
         type: 'skipped',
         routineExerciseId: re.id,
         routineExerciseName: re.exercise_name,
         exerciseId: re.exercise_id,
         exerciseName: re.exercise_name,
-        workoutExerciseId: null,
+        workoutExerciseId: we?.id ?? null,
       });
     } else if (we.exercise_id === re.exercise_id) {
       diff.push({
@@ -331,7 +335,7 @@ export function getRoutineSessionDiff(db, routineId, sessionId) {
   }
   // Extras: workout_exercises with no routine origin (added ad-hoc).
   for (const we of sessionRows) {
-    if (we.substituted_from_routine_exercise_id == null) {
+    if (we.substituted_from_routine_exercise_id == null && we.completed_sets > 0) {
       diff.push({
         type: 'added',
         routineExerciseId: null,
@@ -429,37 +433,82 @@ export function saveSessionAsNewRoutine(db, sessionId, name, folderId) {
 
 /**
  * Update an existing routine so its routine_exercise rows match today's
- * session: delete the old routine_exercise rows and re-derive from the
- * session's workout_exercises (the finish screen "Update template" path,
- * PRD story 26). Returns the updated routine detail.
+ * session: update targets for exercises that were performed, preserve
+ * original targets for exercises that were skipped (no completed sets or
+ * not in the session at all), and add new rows for exercises added ad-hoc
+ * (the finish screen "Update template" path, PRD story 26). Returns the
+ * updated routine detail.
  */
 export function updateRoutineFromSession(db, routineId, sessionId) {
   db.transaction(() => {
-    db.execute(`DELETE FROM routine_exercise WHERE routine_id = ?`, [routineId]);
-    const wes = db
-      .execute(
-        `SELECT * FROM workout_exercise WHERE session_id = ? ORDER BY sort_order`,
-        [sessionId],
-      )
+    // Preserve existing routine_exercise rows for exercises that weren't
+    // performed (no completed sets). Only update rows for exercises that
+    // WERE performed; add new rows for exercises added ad-hoc.
+    const existing = db
+      .execute(`SELECT * FROM routine_exercise WHERE routine_id = ? ORDER BY sort_order`, [routineId])
       .rows;
-    wes.forEach((we, i) => {
+
+    const wes = db
+      .execute(`SELECT * FROM workout_exercise WHERE session_id = ? ORDER BY sort_order`, [sessionId])
+      .rows;
+
+    const handledReIds = new Set();
+    let nextOrder = 0;
+
+    for (const we of wes) {
       const targets = deriveTargetsFromWorkoutExercise(db, we);
-      if (!targets) return;
-      db.execute(
-        `INSERT INTO routine_exercise
-           (routine_id, exercise_id, sort_order, target_sets, target_reps_min, target_reps_max, target_rest_seconds)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          routineId,
-          targets.exerciseId,
-          i,
-          targets.targetSets,
-          targets.targetRepsMin,
-          targets.targetRepsMax,
-          targets.targetRestSeconds,
-        ],
-      );
-    });
+      if (we.substituted_from_routine_exercise_id != null) {
+        const reId = we.substituted_from_routine_exercise_id;
+        handledReIds.add(reId);
+        if (targets) {
+          // Performed: update targets (exercise_id may differ if substituted).
+          db.execute(
+            `UPDATE routine_exercise
+               SET exercise_id = ?, sort_order = ?, target_sets = ?, target_reps_min = ?, target_reps_max = ?, target_rest_seconds = ?
+             WHERE id = ?`,
+            [targets.exerciseId, nextOrder, targets.targetSets, targets.targetRepsMin, targets.targetRepsMax, targets.targetRestSeconds, reId],
+          );
+        } else {
+          // Not performed: keep original targets, just update sort_order.
+          db.execute(`UPDATE routine_exercise SET sort_order = ? WHERE id = ?`, [nextOrder, reId]);
+        }
+      } else {
+        // No origin link: match to an existing routine_exercise by exercise_id
+        // (handles free-flow sessions or test setups without origin links).
+        const match = existing.find((re) => re.exercise_id === we.exercise_id && !handledReIds.has(re.id));
+        if (match) {
+          handledReIds.add(match.id);
+          if (targets) {
+            db.execute(
+              `UPDATE routine_exercise
+                 SET sort_order = ?, target_sets = ?, target_reps_min = ?, target_reps_max = ?, target_rest_seconds = ?
+               WHERE id = ?`,
+              [nextOrder, targets.targetSets, targets.targetRepsMin, targets.targetRepsMax, targets.targetRestSeconds, match.id],
+            );
+          } else {
+            db.execute(`UPDATE routine_exercise SET sort_order = ? WHERE id = ?`, [nextOrder, match.id]);
+          }
+        } else if (targets) {
+          // Truly new exercise not in the routine: insert new.
+          db.execute(
+            `INSERT INTO routine_exercise
+               (routine_id, exercise_id, sort_order, target_sets, target_reps_min, target_reps_max, target_rest_seconds)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [routineId, targets.exerciseId, nextOrder, targets.targetSets, targets.targetRepsMin, targets.targetRepsMax, targets.targetRestSeconds],
+          );
+        }
+      }
+      nextOrder++;
+    }
+
+    // Preserve routine_exercises with no corresponding workout_exercise at all.
+    for (const re of existing) {
+      if (!handledReIds.has(re.id)) {
+        db.execute(`UPDATE routine_exercise SET sort_order = ? WHERE id = ?`, [nextOrder, re.id]);
+        nextOrder++;
+      }
+    }
+
     db.execute(
       `UPDATE routine SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
       [routineId],

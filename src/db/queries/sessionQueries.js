@@ -264,6 +264,16 @@ export function completeSet(db, setId, { restDuration = null } = {}) {
   return rows[0];
 }
 
+/** Unmark a set as complete (toggle off). Clears rest_timer_duration too. */
+export function uncompleteSet(db, setId) {
+  const { rows } = db.execute(
+    `UPDATE exercise_set SET is_completed = 0, rest_timer_duration = NULL
+      WHERE id = ? RETURNING *`,
+    [setId],
+  );
+  return rows[0];
+}
+
 /** Update the set-type marker (normal | warmup | dropset | failure). */
 export function updateSetType(db, setId, setType) {
   if (!SET_TYPES.has(setType)) {

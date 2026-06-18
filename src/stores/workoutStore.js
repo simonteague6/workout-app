@@ -317,6 +317,24 @@ export const useWorkoutStore = create((set, get) => ({
     return completed;
   },
 
+  /** Toggle a set's completion state. Completing starts the rest timer;
+   *  un-completing clears it. */
+  toggleCompleteSet: async (setId) => {
+    const state = get();
+    const { set: setRow } = findSet(state, setId);
+    if (!setRow) throw new Error('workoutStore.toggleCompleteSet: set not found');
+    if (setRow.is_completed === 1) {
+      const uncompleted = sessionQueries.uncompleteSet(getDatabase(), setId);
+      set((s) => ({
+        ...patchSet(s, setId, uncompleted),
+        restTimerEndsAt: null,
+        restTimerTotalSeconds: 0,
+      }));
+      return uncompleted;
+    }
+    return get().completeSet(setId);
+  },
+
   /** Cycle the set-type marker: Normal → Warm-up → Drop-set → Failure → Normal. */
   cycleSetType: async (setId) => {
     const state = get();

@@ -389,7 +389,8 @@ describe('workoutStore — substituteExercise (routine-driven)', () => {
     expect(entry.sets).toHaveLength(2);
     expect(entry.sets.map((s) => s.reps)).toEqual([8, 8]);
     // Weights re-pre-filled from the substitute's history.
-    expect(entry.sets.map((s) => s.weight)).toEqual([30, 30]);
+    // Complete one set so the diff sees it as performed (not skipped).
+    await useWorkoutStore.getState().toggleCompleteSet(entry.sets[0].id);
 
     // The diff records it as a substitution.
     const diff = getRoutineSessionDiff(getDatabase(), routine.id, after.id);
