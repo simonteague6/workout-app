@@ -30,6 +30,7 @@ import { create } from 'zustand';
 
 import { getDatabase } from '../utils/db.js';
 import * as sessionQueries from '../db/queries/sessionQueries.js';
+import { getRoutineDetail } from '../db/queries/routineQueries.js';
 import { getExerciseById } from '../db/queries/exerciseQueries.js';
 import { useSettingsStore } from './settingsStore.js';
 
@@ -153,10 +154,37 @@ export const useWorkoutStore = create((set, get) => ({
     set({ activeSession: active, restTimerEndsAt: null, restTimerTotalSeconds: 0, lastSessionStats: null });
     return active;
   },
-
-  /** Start from a routine (issue #4): not yet implemented. */
-  startFromRoutine: async (_routineId) => {
-    throw new Error('workoutStore.startFromRoutine: not implemented (issue #4)');
+  /** Start a routine-driven workout: creates a session linked to the routine,
+   *  pre-loads each routine exercise with target_sets set rows (reps from the
+   *  routine's target_reps_max, weight pre-filled from prior history of that
+   *  exercise), and records the routine_exercise origin on each workout_exercise
+   *  so the finish diff + rest-timer hierarchy work. Returns the active session. */
+  startFromRoutine: async (routineId) => {
+    const db = getDatabase();
+    const detail = getRoutineDetail(db, routineId);
+    if (!detail) throw new Error('workoutStore.startFromRoutine: routine not found');
+    const session = sessionQueries.createSession(db, { routineId });
+    for (const re of detail.exercises) {
+      const we = sessionQueries.addWorkoutExercise(db, {
+        sessionId: session.id,
+        exerciseId: re.exercise_id,
+        substitutedFromRoutineExerciseId: re.id,
+      });
+      const lastSets = sessionQueries.getLastSessionSetsForExercise(db, re.exercise_id, {
+        excludeSessionId: session.id,
+      });
+      const targetSets = Math.max(1, re.target_sets ?? 1);
+      for (let i = 0; i < targetSets; i++) {
+        db.execute(
+          `INSERT INTO exercise_set (workout_exercise_id, sort_order, weight, reps, set_type, is_completed)
+             VALUES (?, ?, ?, ?, 'normal', 0)`,
+          [we.id, i, lastSets[i]?.weight ?? null, re.target_reps_max ?? null],
+        );
+      }
+    }
+    const active = hydrateActiveSession(db, session.id);
+    set({ activeSession: active, restTimerEndsAt: null, restTimerTotalSeconds: 0, lastSessionStats: null });
+    return active;
   },
 
   /** Reload an interrupted (unfinished) session after an app restart. */
@@ -205,11 +233,16 @@ export const useWorkoutStore = create((set, get) => ({
     return entry;
   },
 
-  /** Substitute the exercise on a workout_exercise (keeps history). */
+  /** Substitute the exercise on a workout_exercise for this session only.
+   *  Swaps exercise_id (keeping the routine_exercise origin link, so the finish
+   *  diff marks this as a substitution), inherits the target set count + reps
+   *  from the original routine exercise, and re-pre-fills each set's weight
+   *  from the substitute exercise's history. Returns the updated active session. */
   substituteExercise: async (workoutExerciseId, newExerciseId) => {
     const db = getDatabase();
     const session = get().activeSession;
     sessionQueries.substituteExercise(db, workoutExerciseId, newExerciseId);
+    sessionQueries.rePrefillSetWeightsForSubstitute(db, workoutExerciseId);
     set({ activeSession: hydrateActiveSession(db, session.id) });
     return get().activeSession;
   },
@@ -282,6 +315,24 @@ export const useWorkoutStore = create((set, get) => ({
       restTimerTotalSeconds: duration ?? 0,
     }));
     return completed;
+  },
+
+  /** Toggle a set's completion state. Completing starts the rest timer;
+   *  un-completing clears it. */
+  toggleCompleteSet: async (setId) => {
+    const state = get();
+    const { set: setRow } = findSet(state, setId);
+    if (!setRow) throw new Error('workoutStore.toggleCompleteSet: set not found');
+    if (setRow.is_completed === 1) {
+      const uncompleted = sessionQueries.uncompleteSet(getDatabase(), setId);
+      set((s) => ({
+        ...patchSet(s, setId, uncompleted),
+        restTimerEndsAt: null,
+        restTimerTotalSeconds: 0,
+      }));
+      return uncompleted;
+    }
+    return get().completeSet(setId);
   },
 
   /** Cycle the set-type marker: Normal → Warm-up → Drop-set → Failure → Normal. */
@@ -372,7 +423,7 @@ export const useWorkoutStore = create((set, get) => ({
     if (!session) throw new Error('workoutStore.finishWorkout: no active session');
     sessionQueries.finishSession(db, session.id, { bodyWeight, notes });
     const stats = sessionQueries.getSessionStats(db, session.id);
-    const withId = { ...stats, sessionId: session.id };
+    const withId = { ...stats, sessionId: session.id, routineId: session.routine_id ?? null };
     set({
       activeSession: null,
       restTimerEndsAt: null,

@@ -264,6 +264,16 @@ export function completeSet(db, setId, { restDuration = null } = {}) {
   return rows[0];
 }
 
+/** Unmark a set as complete (toggle off). Clears rest_timer_duration too. */
+export function uncompleteSet(db, setId) {
+  const { rows } = db.execute(
+    `UPDATE exercise_set SET is_completed = 0, rest_timer_duration = NULL
+      WHERE id = ? RETURNING *`,
+    [setId],
+  );
+  return rows[0];
+}
+
 /** Update the set-type marker (normal | warmup | dropset | failure). */
 export function updateSetType(db, setId, setType) {
   if (!SET_TYPES.has(setType)) {
@@ -360,6 +370,33 @@ export function substituteExercise(db, workoutExerciseId, newExerciseId) {
     [newExerciseId, workoutExerciseId],
   );
   return rows[0];
+}
+
+/**
+ * After a substitute (exercise_id already swapped), re-pre-fill each set's
+ * weight from the substitute exercise's last-session-per-index history. The
+ * target set count + reps are inherited from the original routine exercise
+ * (kept unchanged); only the pre-filled weight comes from the substitute's
+ * history. Sets with no matching history index keep a null weight. PRD story 18.
+ */
+export function rePrefillSetWeightsForSubstitute(db, workoutExerciseId) {
+  const we = db
+    .execute(`SELECT exercise_id, session_id FROM workout_exercise WHERE id = ?`, [workoutExerciseId])
+    .rows[0];
+  if (!we) return;
+  const lastSets = getLastSessionSetsForExercise(db, we.exercise_id, { excludeSessionId: we.session_id });
+  const sets = db
+    .execute(`SELECT id, sort_order FROM exercise_set WHERE workout_exercise_id = ? ORDER BY sort_order`, [
+      workoutExerciseId,
+    ])
+    .rows;
+  db.transaction(() => {
+    sets.forEach((s) => {
+      const prev = lastSets[s.sort_order];
+      const weight = prev ? prev.weight : null;
+      db.execute(`UPDATE exercise_set SET weight = ? WHERE id = ?`, [weight, s.id]);
+    });
+  });
 }
 
 /** Remove a workout_exercise (cascades to its sets + superset membership). */

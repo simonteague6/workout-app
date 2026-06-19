@@ -3,9 +3,10 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { initDatabase, resetDatabaseForTesting, getDatabase } from '../../utils/db.js';
 import { seedExercises } from '../../db/seed/seed.js';
 import { useWorkoutStore } from '../workoutStore.js';
+import { useRoutineStore } from '../routineStore.js';
 import { useSettingsStore } from '../settingsStore.js';
 import { searchExercises, getExerciseById } from '../../db/queries/exerciseQueries.js';
-
+import { getRoutineSessionDiff } from '../../db/queries/routineQueries.js';
 // ---- helpers --------------------------------------------------------------
 
 function findExercise(db, name) {
@@ -318,5 +319,82 @@ describe('workoutStore — finishWorkout', () => {
     // DB reflects completion.
     const { rows } = getDatabase().execute(`SELECT is_completed FROM workout_session ORDER BY id DESC LIMIT 1`);
     expect(rows[0].is_completed).toBe(1);
+  });
+});
+
+describe('workoutStore — startFromRoutine (routine-driven workout)', () => {
+  it('pre-loads exercises with target sets, previous weights, and the routine origin link', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const squat = findExercise(db, 'Barbell Squat');
+    // Prior history for bench so the first set's weight is pre-filled.
+    logPriorSession(db, bench.id, [{ weight: 80, reps: 8 }]);
+    const routine = await useRoutineStore.getState().createRoutine({
+      name: 'Push A',
+      exercises: [
+        { exerciseId: bench.id, targetSets: 3, targetRepsMin: 5, targetRepsMax: 8, targetRestSeconds: 180 },
+        { exerciseId: squat.id, targetSets: 2, targetRepsMin: 5, targetRepsMax: 5, targetRestSeconds: 120 },
+      ],
+    });
+
+    const session = await useWorkoutStore.getState().startFromRoutine(routine.id);
+    expect(session.routine_id).toBe(routine.id);
+    expect(session.exercises).toHaveLength(2);
+
+    const benchEntry = session.exercises[0];
+    expect(benchEntry.exercise_id).toBe(bench.id);
+    // Origin link recorded for the diff + rest-timer hierarchy.
+    expect(benchEntry.substituted_from_routine_exercise_id).not.toBeNull();
+    expect(benchEntry.sets).toHaveLength(3);
+    expect(benchEntry.sets[0].reps).toBe(8); // target_reps_max
+    expect(benchEntry.sets[0].weight).toBe(80); // pre-filled from history
+    expect(benchEntry.sets[0].is_completed).toBe(0);
+
+    const squatEntry = session.exercises[1];
+    expect(squatEntry.sets).toHaveLength(2);
+    expect(squatEntry.sets[0].reps).toBe(5);
+    // No history → weight stays null.
+    expect(squatEntry.sets[0].weight).toBeNull();
+
+    expect(useWorkoutStore.getState().activeSession).toBe(session);
+  });
+});
+
+describe('workoutStore — substituteExercise (routine-driven)', () => {
+  it('swaps the exercise, re-prefills set weights from substitute history, keeps targets, and tracks the origin', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const incline = findExercise(db, 'Incline Dumbbell Press');
+    // History for both: bench 80kg, incline 30kg.
+    logPriorSession(db, bench.id, [{ weight: 80, reps: 8 }, { weight: 80, reps: 6 }]);
+    logPriorSession(db, incline.id, [{ weight: 30, reps: 10 }, { weight: 30, reps: 8 }]);
+    const routine = await useRoutineStore.getState().createRoutine({
+      name: 'Push A',
+      exercises: [
+        { exerciseId: bench.id, targetSets: 2, targetRepsMin: 5, targetRepsMax: 8, targetRestSeconds: 180 },
+      ],
+    });
+    const session = await useWorkoutStore.getState().startFromRoutine(routine.id);
+    const weId = session.exercises[0].id;
+    const originReId = session.exercises[0].substituted_from_routine_exercise_id;
+
+    // Bench pre-filled 80kg for both sets.
+    expect(session.exercises[0].sets.map((s) => s.weight)).toEqual([80, 80]);
+
+    await useWorkoutStore.getState().substituteExercise(weId, incline.id);
+    const after = useWorkoutStore.getState().activeSession;
+    const entry = after.exercises[0];
+    expect(entry.exercise_id).toBe(incline.id);
+    // Origin preserved → the diff will mark this as a substitution.
+    expect(entry.substituted_from_routine_exercise_id).toBe(originReId);
+    // Target set count + reps inherited from the original routine exercise.
+    expect(entry.sets).toHaveLength(2);
+    expect(entry.sets.map((s) => s.reps)).toEqual([8, 8]);
+    // Weights re-pre-filled from the substitute's history.
+    // Complete one set so the diff sees it as performed (not skipped).
+    await useWorkoutStore.getState().toggleCompleteSet(entry.sets[0].id);
+
+    // The diff records it as a substitution.
+    const diff = getRoutineSessionDiff(getDatabase(), routine.id, after.id);
+    expect(diff.find((d) => d.type === 'substituted')).toBeDefined();
+    expect(diff.find((d) => d.type === 'matched')).toBeUndefined();
   });
 });

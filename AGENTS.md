@@ -136,9 +136,11 @@ Located in `src/utils/db.js`:
 ### Test files
 | File | What it covers |
 |------|---------------|
-| `src/stores/__tests__/workoutStore.test.js` | Free flow, add/complete sets, set type cycle, exercise CRUD, supersets, resume, finish |
+| `src/stores/__tests__/workoutStore.test.js` | Free flow, add/complete sets, set type cycle, exercise CRUD, supersets, resume, finish, start-from-routine, substitute |
 | `src/stores/__tests__/settingsStore.test.js` | Settings persistence, AI config, load on restart |
 | `src/stores/__tests__/exerciseStore.test.js` | Library load/search, filtering, sort by frequency, create/edit/archive, photos, history |
+| `src/stores/__tests__/routineStore.test.js` | Folder/routine CRUD, edit + reorder, preview, save-as-new from finish diff |
+| `src/db/__tests__/routineQueries.test.js` | Folder/routine CRUD, routine preview, routine-vs-session diff, save-as-new + update-template-from-session |
 | `src/db/__tests__/sessionQueries.test.js` | Session CRUD, exercise suggestions via pair frequency, set pre-fill, supersets, volume calc |
 | `src/db/__tests__/exerciseQueries.test.js` | Exercise lookup/search/sort, custom exercises, archive/unarchive, photo paths, history |
 | `src/db/__tests__/settingsQueries.test.js` | Read/write app_settings table |
@@ -148,7 +150,6 @@ Located in `src/utils/db.js`:
 | `src/utils/__tests__/formatters.test.js` | Weight conversion, rounding, display formatting |
 
 ### Coverage gaps
-- `routineStore` — no dedicated test file (placeholder store)
 - `src/utils/db.js` — statement splitting, adapter logic not unit-tested (indirectly exercised via store/query tests)
 - `src/utils/theme.js` — theme resolution hook not unit-tested
 - `src/ai/` — no tests yet (module not implemented)
