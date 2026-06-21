@@ -55,6 +55,7 @@ export default function ExerciseSessionCard({
 
   const inSuperset = entry.supersetGroupId != null;
   const prev = entry.previousSets ?? [];
+  const hideWeight = entry.exercise.force === 'static' || entry.exercise.exercise_type === 'flexibility' || entry.exercise.exercise_type === 'cardio';
 
   const handleMenu = (key) => {
     setMenuOpen(false);
@@ -99,13 +100,13 @@ export default function ExerciseSessionCard({
           <Text style={[styles.colHead, { width: 60 }]}>Weight</Text>
           <Text style={[styles.colHead, { width: 48, marginLeft: spacing.xs }]}>Reps</Text>
         </View>
-
         {entry.sets.map((set, i) => (
           <SetRow
             key={set.id}
             set={set}
             index={i + 1}
             previous={prev[i] ?? null}
+            hideWeight={hideWeight}
             onCycleType={() => onCycleType(set.id)}
             onWeight={(w) => onUpdateSetFields(set.id, { weight: w })}
             onReps={(r) => onUpdateSetFields(set.id, { reps: r })}

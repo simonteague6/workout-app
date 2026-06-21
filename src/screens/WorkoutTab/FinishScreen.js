@@ -203,7 +203,7 @@ function RoutineDiffSection({
             <View key={i} style={[styles.diffRow, { backgroundColor: meta.bg }]}>
               <Text style={styles.diffGlyph}>{meta.glyph}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.diffName} numberOfLines={1}>
+                <Text style={[styles.diffName, d.type === 'substituted' && { textDecorationLine: 'lineThrough' }]} numberOfLines={1}>
                   {d.type === 'added' ? d.exerciseName : d.routineExerciseName}
                 </Text>
                 {d.type === 'substituted' ? (

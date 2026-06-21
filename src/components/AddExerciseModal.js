@@ -6,7 +6,7 @@
 // onCreateNew(name) so the owning screen can create + add in one step.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useWorkoutStore } from '../stores/workoutStore.js';
 import { colors, radius, spacing } from '../theme.js';
@@ -70,41 +70,46 @@ export default function AddExerciseModal({ visible, onSelect, onCreateNew, onClo
             <Text style={styles.close}>Close</Text>
           </Pressable>
         </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={64}
+        >
+          <TextInput
+            ref={inputRef}
+            style={styles.search}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search or type a new exercise name"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="done"
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
 
-        <TextInput
-          ref={inputRef}
-          style={styles.search}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search or type a new exercise name"
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="done"
-          autoCapitalize="words"
-          autoCorrect={false}
-        />
-
-        <FlatList
-          style={styles.list}
-          keyboardShouldPersistTaps="handled"
-          data={results}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.sep} />}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No matches — create a new one below.</Text>
-          }
-          ListFooterComponent={
-            <Pressable
-              style={[styles.row, styles.createRow]}
-              onPress={handleCreate}
-              android_ripple={{ color: colors.primarySoft }}
-            >
-              <Text style={styles.createText}>
-                {query.trim() ? `Create new “${query.trim()}”` : 'Create new exercise'}
-              </Text>
-            </Pressable>
-          }
-        />
+          <FlatList
+            style={styles.list}
+            keyboardShouldPersistTaps="handled"
+            data={results}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
+            ListEmptyComponent={
+              <Text style={styles.empty}>No matches — create a new one below.</Text>
+            }
+            ListFooterComponent={
+              <Pressable
+                style={[styles.row, styles.createRow]}
+                onPress={handleCreate}
+                android_ripple={{ color: colors.primarySoft }}
+              >
+                <Text style={styles.createText}>
+                  {query.trim() ? `Create new "${query.trim()}"` : 'Create new exercise'}
+                </Text>
+              </Pressable>
+            }
+          />
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

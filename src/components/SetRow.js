@@ -41,7 +41,7 @@ function displayWeight(kg, unit) {
  * @param {() => void} props.onComplete  checkmark
  * @param {() => void} [props.onDelete]  long-press / swipe to delete
  */
-export default function SetRow({ set, index, previous, onCycleType, onWeight, onReps, onComplete, onDelete }) {
+export default function SetRow({ set, index, previous, hideWeight, onCycleType, onWeight, onReps, onComplete, onDelete }) {
   const unit = useSettingsStore((s) => s.unit);
   const marker = MARKERS[set.set_type] ?? MARKERS.normal;
   const completed = set.is_completed === 1;
@@ -59,6 +59,7 @@ export default function SetRow({ set, index, previous, onCycleType, onWeight, on
   }, [set.reps]);
 
   const commitWeight = () => {
+    if (hideWeight) return;
     const parsed = parseFloat(weight);
     if (weight === '' || Number.isNaN(parsed)) {
       onWeight(null);
@@ -94,18 +95,22 @@ export default function SetRow({ set, index, previous, onCycleType, onWeight, on
         )}
       </View>
 
-      <TextInput
-        style={[styles.input, styles.weightInput]}
-        value={weight}
-        onChangeText={setWeight}
-        onBlur={commitWeight}
-        keyboardType="numeric"
-        returnKeyType="done"
-        placeholder="0"
-        placeholderTextColor={colors.textMuted}
-        editable={!completed}
-      />
-      <Text style={styles.unit}>{unit}</Text>
+      {hideWeight ? (
+        <Text style={[styles.input, styles.weightInput, styles.weightDash]}>—</Text>
+      ) : (
+        <TextInput
+          style={[styles.input, styles.weightInput]}
+          value={weight}
+          onChangeText={setWeight}
+          onBlur={commitWeight}
+          keyboardType="numeric"
+          returnKeyType="done"
+          placeholder="0"
+          placeholderTextColor={colors.textMuted}
+          editable={!completed}
+        />
+      )}
+      {hideWeight ? null : <Text style={styles.unit}>{unit}</Text>}
 
       <TextInput
         style={[styles.input, styles.repsInput]}
@@ -168,6 +173,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   weightInput: { flex: 0, width: 60 },
+  weightDash: { textAlign: 'center', lineHeight: 30, color: colors.textMuted },
   repsInput: { width: 48, marginLeft: spacing.xs },
   unit: { marginLeft: 4, marginRight: spacing.sm, fontSize: 12, color: colors.textMuted },
   unitLabel: { marginLeft: 4, fontSize: 12, color: colors.textMuted },
