@@ -17,6 +17,7 @@ import RestTimer from '../../components/RestTimer.js';
 import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useExerciseStore } from '../../stores/exerciseStore.js';
 import { colors, radius, spacing } from '../../theme.js';
+export default function LiveSession({ navigation }) {
 
   const insets = useSafeAreaInsets();
   const activeSession = useWorkoutStore((s) => s.activeSession);
