@@ -105,16 +105,22 @@ export default function ImportReviewScreen() {
 
   function renderExercise({ item, index }) {
     return (
-      <View style={[styles.exerciseRow, !item.matched && styles.unmatchedRow]}>
+      <View style={[styles.exerciseRow, item.matched ? styles.matchedRow : styles.unmatchedRow]}>
         <View style={styles.exerciseHeader}>
           <Text style={[styles.statusIcon, item.matched ? styles.matchedIcon : styles.unmatchedIcon]}>
             {item.matched ? '\u2713' : '\u26A0'}
           </Text>
           <View style={styles.exerciseInfo}>
             <Text style={styles.exerciseName}>{item.name}</Text>
+            {item.matched && item.matchedExerciseName ? (
+              <Text style={styles.matchedSubtitle}>Matched: {item.matchedExerciseName}</Text>
+            ) : null}
             <Text style={styles.exerciseDetails}>
               {item.sets} x {item.repsMin}-{item.repsMax} reps
               {item.restSeconds ? ` \u00B7 ${item.restSeconds}s rest` : ''}
+            </Text>
+            <Text style={[styles.matchLabel, item.matched ? styles.matchedLabel : styles.unmatchedLabel]}>
+              {item.matched ? 'Matched' : 'Not matched'}
             </Text>
           </View>
         </View>
@@ -191,6 +197,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
+  matchedRow: {
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginVertical: spacing.xs,
+  },
   unmatchedRow: {
     backgroundColor: colors.warningSoft,
     borderRadius: radius.sm,
@@ -217,14 +229,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   exerciseName: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
+  },
+  matchedSubtitle: {
+    fontSize: 13,
+    color: colors.success,
+    marginTop: 1,
   },
   exerciseDetails: {
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  matchLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  matchedLabel: {
+    color: colors.success,
+  },
+  unmatchedLabel: {
+    color: colors.warning,
   },
   actionRow: {
     flexDirection: 'row',

@@ -17,10 +17,11 @@ import { sendAIRequest } from './aiClient.js';
  *   repsMin: number,
  *   repsMax: number,
  *   restSeconds: number,
- *   matchedExerciseId: number|null,
+ *   matchedExerciseName: string|null,
  *   matched: boolean,
  * }>} exercises
  */
+
 
 /**
  * Full pipeline: URL/text → extract text → LLM prompt → parse JSON → match
@@ -90,6 +91,7 @@ export async function importRoutine(db, aiConfig, input) {
       repsMin: Number(ex.repsMin) || 5,
       repsMax: Number(ex.repsMax) || 12,
       restSeconds: Number(ex.restSeconds) || 90,
+      matchedExerciseName: matched ? matched.name : null,
       matchedExerciseId: matched ? matched.id : null,
       matched: !!matched,
     });
