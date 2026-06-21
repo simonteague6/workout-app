@@ -102,6 +102,53 @@ describe('exerciseQueries — search & sort', () => {
     expect(zeroNames).toEqual([...zeroNames].sort());
   });
 
+  it('fuzzy-matches by token: "bench" matches bench press exercises', () => {
+    const results = searchExercises(db, { query: 'bench' });
+    expect(results.length).toBeGreaterThan(0);
+    // Every result should have a word starting with "bench" in its name
+    expect(results.every((e) => /\bbench/i.test(e.name))).toBe(true);
+  });
+
+  it('fuzzy-matches reversed tokens: "press bench" matches bench press', () => {
+    const results = searchExercises(db, { query: 'press bench' });
+    expect(results.length).toBeGreaterThan(0);
+    // The top result should be a bench press variant
+    const top = results[0];
+    expect(top.name.toLowerCase()).toMatch(/bench.*press|press.*bench/);
+    expect(top._matchScore).toBeGreaterThan(0);
+  });
+
+  it('fuzzy-matches concatenated tokens: "benchpres" matches bench press', () => {
+    const results = searchExercises(db, { query: 'benchpres' });
+    expect(results.length).toBeGreaterThan(0);
+    const top = results[0];
+    expect(top.name.toLowerCase()).toMatch(/bench.*press/);
+    expect(top._matchScore).toBeGreaterThan(0);
+  });
+
+  it('sorts results by match score, then usage, then name', () => {
+    const results = searchExercises(db, { query: 'press' });
+    expect(results.length).toBeGreaterThan(1);
+    for (let i = 1; i < results.length; i++) {
+      const prev = results[i - 1];
+      const curr = results[i];
+      if (prev._matchScore !== curr._matchScore) {
+        expect(prev._matchScore).toBeGreaterThan(curr._matchScore);
+      } else if (prev.usage_count !== curr.usage_count) {
+        expect(prev.usage_count).toBeGreaterThan(curr.usage_count);
+      } else {
+        expect(prev.name.localeCompare(curr.name)).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it('empty query returns all exercises (current behavior)', () => {
+    const all = searchExercises(db);
+    const alsoAll = searchExercises(db, { query: '' });
+    expect(alsoAll.length).toBe(all.length);
+    expect(alsoAll).toEqual(all);
+  });
+
   it('searches by name (case-insensitive substring)', () => {
     const results = searchExercises(db, { query: 'curl' });
     expect(results.length).toBeGreaterThan(0);

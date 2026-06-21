@@ -144,6 +144,35 @@ describe('importRoutine', () => {
     expect(result.exercises[2].matchedExerciseId).toBeNull();
   });
 
+  it('fuzzy-matches "Bench Press" to "Bench Press" in DB (token overlap)', async () => {
+    // LLM returns "Bench Press" — should fuzzy-match the exact "Bench Press" in DB
+    mockLLMResponse({
+      routineName: 'Chest Day',
+      exercises: [
+        { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Chest day');
+
+    expect(result.exercises[0].matched).toBe(true);
+    expect(result.exercises[0].matchedExerciseId).toBeGreaterThan(0);
+  });
+
+  it('does NOT false-match wildly different exercise names', async () => {
+    mockLLMResponse({
+      routineName: 'Weird Day',
+      exercises: [
+        { name: 'Quantum Flutter', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Quantum flutter');
+
+    expect(result.exercises[0].matched).toBe(false);
+    expect(result.exercises[0].matchedExerciseId).toBeNull();
+  });
+
   it('fetches URL content and sends extracted text to LLM', async () => {
     // First call: URL fetch returns HTML
     // Second call: LLM returns JSON
