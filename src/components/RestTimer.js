@@ -18,6 +18,7 @@ function formatSeconds(total) {
   const r = s % 60;
   return `${m}:${String(r).padStart(2, '0')}`;
 }
+export default function RestTimer() {
 
   const insets = useSafeAreaInsets();
   const endsAt = useWorkoutStore((s) => s.restTimerEndsAt);
@@ -49,6 +50,7 @@ function formatSeconds(total) {
 
   const remaining = Math.max(0, (endsAt - now) / 1000);
   const pct = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
+  return (
 
     <Animated.View style={[styles.bar, { opacity, paddingTop: insets.top, height: 56 + insets.top }]} pointerEvents="box-none">
       <View style={styles.fill} />

@@ -18,6 +18,7 @@ import { colors, radius, spacing } from '../../theme.js';
 const BAR_MAX_WIDTH = 200;
 const BAR_HEIGHT = 16;
 const BAR_GAP = 4;
+export default function ProgressScreen() {
 
   const insets = useSafeAreaInsets();
   const [allTimePRs, setAllTimePRs] = useState([]);

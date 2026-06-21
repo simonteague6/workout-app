@@ -27,6 +27,7 @@ const DEMO_URLS = [
   { label: 'Push/Pull/Legs split', url: 'https://www.muscleandstrength.com/workouts/push-pull-legs-split.html' },
   { label: 'Starting Strength', url: 'https://startingstrength.com/get-started' },
 ];
+export default function OnboardingScreen() {
 
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();

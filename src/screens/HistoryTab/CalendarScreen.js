@@ -18,6 +18,7 @@ const MONTH_NAMES = [
 /**
  * @param {{ navigation: import('@react-navigation/native').NavigationProp }} props
  */
+export default function CalendarScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
