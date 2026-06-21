@@ -15,6 +15,7 @@ import ExerciseLibraryScreen from '../screens/MoreTab/ExerciseLibraryScreen.js';
 import ExerciseDetailScreen from '../screens/MoreTab/ExerciseDetailScreen.js';
 import ExerciseEditorScreen from '../screens/MoreTab/ExerciseEditorScreen.js';
 import ExerciseHistoryScreen from '../screens/HistoryTab/ExerciseHistoryScreen.js';
+import SessionDetail from '../screens/HistoryTab/SessionDetail.js';
 import AppearanceSettings from '../screens/MoreTab/AppearanceSettings.js';
 import AISettings from '../screens/MoreTab/AISettings.js';
 import DataScreen from '../screens/MoreTab/DataScreen.js';
@@ -79,6 +80,11 @@ function HistoryStack() {
         name="ExerciseHistory"
         component={ExerciseHistoryScreen}
         options={({ route }) => ({ title: route.params?.exerciseName ?? 'Exercise history' })}
+      />
+      <Stack.Screen
+        name="SessionDetail"
+        component={SessionDetail}
+        options={{ title: 'Session' }}
       />
     </Stack.Navigator>
   );
