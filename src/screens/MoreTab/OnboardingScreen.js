@@ -3,6 +3,7 @@
 // Screen 2: "How to begin?" with three options: Start Free Flow,
 // Import from URL (pre-loaded demo URLs), Browse Exercises.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,7 +28,7 @@ const DEMO_URLS = [
   { label: 'Starting Strength', url: 'https://startingstrength.com/get-started' },
 ];
 
-export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { ai } = useSettingsStore();
   const [step, setStep] = useState(1);
@@ -104,7 +105,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.heading}>How to begin?</Text>
       <Text style={styles.subheading}>Choose how you want to start your fitness journey</Text>
 

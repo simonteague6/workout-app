@@ -6,6 +6,7 @@
 // and the finish flow. All mutations delegate to the store; navigation (open
 // exercise detail, finish screen) is passed up to the Workout stack.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -17,7 +18,7 @@ import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useExerciseStore } from '../../stores/exerciseStore.js';
 import { colors, radius, spacing } from '../../theme.js';
 
-export default function LiveSession({ navigation }) {
+  const insets = useSafeAreaInsets();
   const activeSession = useWorkoutStore((s) => s.activeSession);
   const addExercise = useWorkoutStore((s) => s.addExercise);
   const addSet = useWorkoutStore((s) => s.addSet);
@@ -120,14 +121,14 @@ export default function LiveSession({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <RestTimer />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={56}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: 56 + insets.top }]} keyboardShouldPersistTaps="handled">
           {activeSession.exercises.length === 0 ? (
             <View style={styles.firstHint}>
               <Text style={styles.firstHintText}>Add your first exercise to start logging.</Text>

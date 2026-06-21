@@ -4,15 +4,16 @@
 // re-renders every screen at once. Not unit-tested (UI rendering is out of
 // scope per AGENTS.md); the store/query logic behind these controls is.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-
 import { useAppTheme } from '../utils/theme.js';
 
 export function ScreenContainer({ children, pad = 16 }) {
+  const insets = useSafeAreaInsets();
   const { colors } = useAppTheme();
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
+      style={{ backgroundColor: colors.background, paddingTop: insets.top }}
       contentContainerStyle={{ padding: pad }}
     >
       {children}

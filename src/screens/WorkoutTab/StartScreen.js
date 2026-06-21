@@ -6,6 +6,7 @@
 // (PRD story 31). "New routine" opens the routine builder. On mount it
 // rehydrates any unfinished session and loads folders + routines.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -13,7 +14,7 @@ import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useRoutineStore } from '../../stores/routineStore.js';
 import { colors, radius, spacing } from '../../theme.js';
 
-export default function StartScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const activeSession = useWorkoutStore((s) => s.activeSession);
   const startFreeFlow = useWorkoutStore((s) => s.startFreeFlow);
   const resumeInterrupted = useWorkoutStore((s) => s.resumeInterrupted);
@@ -46,7 +47,7 @@ export default function StartScreen({ navigation }) {
   const hasRoutines = routines.length > 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Workout</Text>
 
       {activeSession ? (
