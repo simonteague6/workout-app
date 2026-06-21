@@ -7,7 +7,7 @@
 // passed in from the owning screen so the same list works from either tab.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useExerciseStore } from '../stores/exerciseStore.js';
 import { colors, radius, spacing } from '../theme.js';
@@ -19,8 +19,9 @@ import OptionPickerModal from './OptionPickerModal.js';
  * @param {(id: number) => void} props.onSelectExercise
  * @param {(id: number) => void} props.onEditExercise
  * @param {() => void} props.onCreateExercise
+ * @param {'top'|'bottom'} [props.searchBarPosition='top']
  */
-export default function ExerciseLibraryList({ onSelectExercise, onEditExercise, onCreateExercise }) {
+export default function ExerciseLibraryList({ onSelectExercise, onEditExercise, onCreateExercise, searchBarPosition = 'top' }) {
   const exercises = useExerciseStore((s) => s.exercises);
   const isLoading = useExerciseStore((s) => s.isLoading);
   const searchQuery = useExerciseStore((s) => s.searchQuery);
@@ -61,68 +62,95 @@ export default function ExerciseLibraryList({ onSelectExercise, onEditExercise, 
     [onSelectExercise, onEditExercise],
   );
 
-  const listHeader = (
-    <View style={styles.controls}>
-      <TextInput
-        style={styles.search}
-        value={searchQuery}
-        onChangeText={handleSearch}
-        placeholder="Search exercises by name"
-        placeholderTextColor={colors.textMuted}
-        autoCorrect={false}
-        returnKeyType="search"
+  const searchBar = (
+    <TextInput
+      style={styles.search}
+      value={searchQuery}
+      onChangeText={handleSearch}
+      placeholder="Search exercises by name"
+      placeholderTextColor={colors.textMuted}
+      autoCorrect={false}
+      returnKeyType="search"
+    />
+  );
+
+  const filterChips = (
+    <View style={styles.chipRow}>
+      <FilterChip
+        label="Muscle"
+        value={muscleName}
+        onPress={() => setPicker('muscle')}
       />
-      <View style={styles.chipRow}>
-        <FilterChip
-          label="Muscle"
-          value={muscleName}
-          onPress={() => setPicker('muscle')}
-        />
-        <FilterChip
-          label="Equipment"
-          value={equipmentName}
-          onPress={() => setPicker('equipment')}
-        />
-        {hasFilters ? (
-          <Pressable style={styles.clearChip} onPress={clearFilters}>
-            <Text style={styles.clearText}>Clear</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <FilterChip
+        label="Equipment"
+        value={equipmentName}
+        onPress={() => setPicker('equipment')}
+      />
+      {hasFilters ? (
+        <Pressable style={styles.clearChip} onPress={clearFilters}>
+          <Text style={styles.clearText}>Clear</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 
-  return (
-    <View style={styles.container}>
-      <FlatList
-        data={exercises}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderRow}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.empty}>
-              <ActivityIndicator />
-            </View>
-          ) : (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No exercises match your search.</Text>
-              <Pressable style={styles.createLink} onPress={onCreateExercise}>
-                <Text style={styles.createLinkText}>Create a custom exercise</Text>
-              </Pressable>
-            </View>
-          )
-        }
-        ListFooterComponent={
-          exercises.length > 0 ? (
-            <Pressable style={styles.createFooter} onPress={onCreateExercise}>
-              <Text style={styles.createFooterText}>+ Create custom exercise</Text>
+  const isBottom = searchBarPosition === 'bottom';
+
+  const listHeader = (
+    <View style={styles.controls}>
+      {!isBottom && searchBar}
+      {filterChips}
+    </View>
+  );
+
+  const listContent = (
+    <FlatList
+      data={exercises}
+      keyExtractor={(item) => String(item.id)}
+      renderItem={renderRow}
+      ItemSeparatorComponent={() => <View style={styles.sep} />}
+      ListHeaderComponent={listHeader}
+      ListEmptyComponent={
+        isLoading ? (
+          <View style={styles.empty}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>No exercises match your search.</Text>
+            <Pressable style={styles.createLink} onPress={onCreateExercise}>
+              <Text style={styles.createLinkText}>Create a custom exercise</Text>
             </Pressable>
-          ) : null
-        }
-        contentContainerStyle={exercises.length === 0 ? styles.emptyList : styles.list}
-      />
+          </View>
+        )
+      }
+      ListFooterComponent={
+        exercises.length > 0 ? (
+          <Pressable style={styles.createFooter} onPress={onCreateExercise}>
+            <Text style={styles.createFooterText}>+ Create custom exercise</Text>
+          </Pressable>
+        ) : null
+      }
+      contentContainerStyle={exercises.length === 0 ? styles.emptyList : styles.list}
+    />
+  );
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      {isBottom ? (
+        <>
+          {listContent}
+          <View style={styles.bottomSearchContainer}>
+            {searchBar}
+          </View>
+        </>
+      ) : (
+        listContent
+      )}
 
       <OptionPickerModal
         visible={picker === 'muscle'}
@@ -142,7 +170,7 @@ export default function ExerciseLibraryList({ onSelectExercise, onEditExercise, 
         onSelect={(opt) => setFilters({ equipmentId: opt ? opt.id : null })}
         onClose={() => setPicker(null)}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -180,6 +208,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     fontSize: 15,
     color: colors.text,
+  },
+  bottomSearchContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   chipRow: {
     flexDirection: 'row',

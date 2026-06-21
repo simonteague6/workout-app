@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert } from 'react-native';
 
 import { ScreenContainer, Section, SegmentedControl, TextInputField, PrimaryButton } from '../../components/SettingsControls.js';
-import { useSettingsStore, UNITS, THEME } from '../../stores/settingsStore.js';
+import { useSettingsStore, UNITS, THEME, SEARCH_BAR_POSITIONS } from '../../stores/settingsStore.js';
 
 // Appearance — theme, units, and app-wide default values. Theme and unit
 // toggles write through immediately (and persist); the default rest timer and
@@ -14,8 +14,10 @@ export default function AppearanceSettings() {
     theme,
     defaultRestSeconds,
     defaultIncrement,
+    searchBarPosition,
     setUnit,
     setTheme,
+    setSearchBarPosition,
     setDefaultRestSeconds,
     setDefaultIncrement,
   } = useSettingsStore();
@@ -60,6 +62,17 @@ export default function AppearanceSettings() {
           options={[
             { label: 'lbs', value: UNITS.LBS },
             { label: 'kg', value: UNITS.KG },
+          ]}
+        />
+      </Section>
+
+      <Section title="Search bar position">
+        <SegmentedControl
+          value={searchBarPosition}
+          onValueChange={setSearchBarPosition}
+          options={[
+            { label: 'Top', value: SEARCH_BAR_POSITIONS.TOP },
+            { label: 'Bottom', value: SEARCH_BAR_POSITIONS.BOTTOM },
           ]}
         />
       </Section>

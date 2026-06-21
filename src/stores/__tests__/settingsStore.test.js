@@ -18,6 +18,7 @@ import {
   UNITS,
   THEME,
   AI_PROVIDERS,
+  SEARCH_BAR_POSITIONS,
 } from '../settingsStore.js';
 // The store persists via the shared singleton db (getDatabase), so each test
 // boots a fresh in-memory shared db, resets the keystore, and resets the
@@ -27,7 +28,7 @@ const DEFAULTS = {
   theme: THEME.SYSTEM,
   defaultRestSeconds: 120,
   defaultIncrement: 2.5,
-  ai: { provider: null, apiKey: null, model: null, endpoint: null },
+  searchBarPosition: 'top',
 };
 
 beforeEach(() => {
@@ -80,6 +81,20 @@ describe('settingsStore — persistence', () => {
 
   it('rejects a non-positive increment', () => {
     expect(() => useSettingsStore.getState().setDefaultIncrement(0)).toThrow(/invalid value/);
+  });
+
+  it('defaults searchBarPosition to top', () => {
+    expect(useSettingsStore.getState().searchBarPosition).toBe('top');
+  });
+
+  it('persists searchBarPosition to app_settings and updates state', () => {
+    useSettingsStore.getState().setSearchBarPosition(SEARCH_BAR_POSITIONS.BOTTOM);
+    expect(useSettingsStore.getState().searchBarPosition).toBe('bottom');
+    expect(getSetting(getDatabase(), 'searchBarPosition')).toBe('bottom');
+  });
+
+  it('rejects an invalid search bar position', () => {
+    expect(() => useSettingsStore.getState().setSearchBarPosition('left')).toThrow(/invalid position/);
   });
 });
 
@@ -139,6 +154,7 @@ describe('settingsStore — loadSettings (restart hydration)', () => {
       `INSERT INTO app_settings (key, value) VALUES
         ('theme','dark'), ('unit','kg'),
         ('defaultRestSeconds','90'), ('defaultIncrement','5'),
+        ('searchBarPosition','bottom'),
         ('aiProvider','openai'), ('aiModel','gpt-4o-mini'),
         ('aiEndpoint','https://api.openai.com/v1')`,
     );
@@ -154,6 +170,7 @@ describe('settingsStore — loadSettings (restart hydration)', () => {
     expect(s.unit).toBe(UNITS.KG);
     expect(s.defaultRestSeconds).toBe(90);
     expect(s.defaultIncrement).toBe(5);
+    expect(s.searchBarPosition).toBe('bottom');
     expect(s.ai).toEqual({
       provider: 'openai',
       apiKey: 'sk-from-keystore',
@@ -168,7 +185,7 @@ describe('settingsStore — loadSettings (restart hydration)', () => {
     expect(s.theme).toBe(THEME.SYSTEM);
     expect(s.unit).toBe(UNITS.LBS);
     expect(s.defaultRestSeconds).toBe(120);
-    expect(s.ai).toEqual({ provider: null, apiKey: null, model: null, endpoint: null });
+    expect(s.searchBarPosition).toBe('top');
   });
 });
 
