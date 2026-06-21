@@ -1,5 +1,6 @@
 // Progress tab — 1RM charts, volume trends, heatmap, muscle-group frequency, PRs.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -18,7 +19,7 @@ const BAR_MAX_WIDTH = 200;
 const BAR_HEIGHT = 16;
 const BAR_GAP = 4;
 
-export default function ProgressScreen() {
+  const insets = useSafeAreaInsets();
   const [allTimePRs, setAllTimePRs] = useState([]);
   const [recentPRs, setRecentPRs] = useState([]);
   const [volumeData, setVolumeData] = useState([]);
@@ -35,7 +36,7 @@ export default function ProgressScreen() {
   }, []);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
       <Text style={styles.header}>Progress</Text>
 
       {/* All-time PRs */}

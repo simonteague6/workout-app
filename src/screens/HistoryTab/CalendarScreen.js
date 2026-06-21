@@ -1,6 +1,7 @@
 // History tab — calendar of past sessions (issue #6). Shows a month-grid
 // calendar view with workout dots, navigation arrows, and session detail links.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -17,7 +18,7 @@ const MONTH_NAMES = [
 /**
  * @param {{ navigation: import('@react-navigation/native').NavigationProp }} props
  */
-export default function CalendarScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -93,7 +94,7 @@ export default function CalendarScreen({ navigation }) {
     currentMonth.year === new Date().getFullYear() && currentMonth.month === new Date().getMonth();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
       <Text style={styles.header}>History</Text>
 
       {/* Browse exercises button */}
