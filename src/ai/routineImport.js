@@ -11,15 +11,20 @@ import { sendAIRequest } from './aiClient.js';
 /**
  * @typedef {Object} ImportResult
  * @property {string} routineName
+ * @property {boolean} hasMultipleDays
  * @property {Array<{
- *   name: string,
- *   sets: number,
- *   repsMin: number,
- *   repsMax: number,
- *   restSeconds: number,
- *   matchedExerciseName: string|null,
- *   matched: boolean,
- * }>} exercises
+ *   dayLabel: string,
+ *   exercises: Array<{
+ *     name: string,
+ *     sets: number,
+ *     repsMin: number,
+ *     repsMax: number,
+ *     restSeconds: number,
+ *     matchedExerciseName: string|null,
+ *     matchedExerciseId: number|null,
+ *     matched: boolean,
+ *   }>
+ * }>} days
  */
 
 
@@ -48,7 +53,7 @@ export async function importRoutine(db, aiConfig, input) {
   // Step 2: Build system prompt
   const systemPrompt =
     'You are a fitness routine parser. Extract the workout routine as JSON with this schema: ' +
-    '{ routineName: string, exercises: [{ name: string, sets: number, repsMin: number, repsMax: number, restSeconds: number }] }';
+    '{ routineName: string, hasMultipleDays: boolean, days: [{ dayLabel: string, exercises: [{ name: string, sets: number, repsMin: number, repsMax: number, restSeconds: number }] }] }';
 
   // Step 3: Call LLM
   let parsed;
@@ -59,7 +64,8 @@ export async function importRoutine(db, aiConfig, input) {
     if (err.message && err.message.startsWith('AI response was not valid JSON')) {
       return {
         routineName: '',
-        exercises: [],
+        hasMultipleDays: false,
+        days: [],
         _rawText: err.message.replace('AI response was not valid JSON:\n', ''),
       };
     }
@@ -72,32 +78,45 @@ export async function importRoutine(db, aiConfig, input) {
   }
 
   const routineName = (parsed.routineName || '').toString().trim() || 'Imported Routine';
-  const rawExercises = Array.isArray(parsed.exercises) ? parsed.exercises : [];
 
-  if (rawExercises.length === 0) {
+  // Determine format: new multi-day (days array) or old flat (exercises array)
+  const hasMultipleDays = !!(parsed.hasMultipleDays);
+  let rawDays;
+  if (Array.isArray(parsed.days) && parsed.days.length > 0) {
+    rawDays = parsed.days;
+  } else if (Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
+    // Backward compatibility: old flat format → single day
+    rawDays = [{ dayLabel: 'Full Routine', exercises: parsed.exercises }];
+  } else {
     throw new Error('AI returned no exercises. The input may not contain a recognizable routine.');
   }
 
-  // Step 4: Match exercises against the Exercise library
-  const exercises = [];
-  for (const ex of rawExercises) {
-    const name = (ex.name || '').toString().trim();
-    if (!name) continue;
+  // Step 4: Match exercises against the Exercise library for each day
+  const days = [];
+  for (const day of rawDays) {
+    const dayLabel = (day.dayLabel || '').toString().trim() || 'Workout';
+    const rawExercises = Array.isArray(day.exercises) ? day.exercises : [];
+    const exercises = [];
+    for (const ex of rawExercises) {
+      const name = (ex.name || '').toString().trim();
+      if (!name) continue;
 
-    const matched = findExactMatch(db, name);
-    exercises.push({
-      name,
-      sets: Number(ex.sets) || 3,
-      repsMin: Number(ex.repsMin) || 5,
-      repsMax: Number(ex.repsMax) || 12,
-      restSeconds: Number(ex.restSeconds) || 90,
-      matchedExerciseName: matched ? matched.name : null,
-      matchedExerciseId: matched ? matched.id : null,
-      matched: !!matched,
-    });
+      const matched = findExactMatch(db, name);
+      exercises.push({
+        name,
+        sets: Number(ex.sets) || 3,
+        repsMin: Number(ex.repsMin) || 5,
+        repsMax: Number(ex.repsMax) || 12,
+        restSeconds: Number(ex.restSeconds) || 90,
+        matchedExerciseName: matched ? matched.name : null,
+        matchedExerciseId: matched ? matched.id : null,
+        matched: !!matched,
+      });
+    }
+    days.push({ dayLabel, exercises });
   }
 
-  return { routineName, exercises };
+  return { routineName, hasMultipleDays, days };
 }
 
 /**

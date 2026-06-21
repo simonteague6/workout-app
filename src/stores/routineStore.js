@@ -78,6 +78,21 @@ export const useRoutineStore = create((set, get) => ({
     set({ routines: refreshRoutines(), currentRoutine: routineQueries.getRoutineDetail(getDatabase(), routine.id) });
     return routine;
   },
+  /**
+   * Create a folder + one routine per day inside it. Refreshes `folders` and
+   * `routines`. Returns the folder id.
+   * @param {string} folderName
+   * @param {Array<{ name: string, exercises: Array<{ exerciseId: number, targetSets?: number, targetRepsMin?: number, targetRepsMax?: number, targetRestSeconds?: number }> }>} routines
+   */
+  createRoutinesInFolder: async (folderName, routines) => {
+    const db = getDatabase();
+    const folder = routineQueries.createFolder(db, folderName);
+    for (const r of routines) {
+      routineQueries.createRoutine(db, { name: r.name, folderId: folder.id, exercises: r.exercises });
+    }
+    set({ folders: refreshFolders(), routines: refreshRoutines() });
+    return folder.id;
+  },
 
   /**
    * Load a routine's full detail (routine + resolved routine_exercise rows)

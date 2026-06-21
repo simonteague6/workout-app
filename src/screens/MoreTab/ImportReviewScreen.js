@@ -5,8 +5,8 @@
 import { useState } from 'react';
 import {
   Alert,
-  FlatList,
   Pressable,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -24,14 +24,24 @@ export default function ImportReviewScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { importResult } = route.params || {};
-  const { createRoutine } = useRoutineStore();
+  const { createRoutine, createRoutinesInFolder } = useRoutineStore();
 
   const [routineName, setRoutineName] = useState(importResult?.routineName || 'Imported Routine');
   const [saving, setSaving] = useState(false);
 
-  const exercises = importResult?.exercises || [];
-  const matchedCount = exercises.filter((e) => e.matched).length;
-  const unmatchedCount = exercises.filter((e) => !e.matched).length;
+  const hasMultipleDays = importResult?.hasMultipleDays || false;
+  const days = importResult?.days || [];
+
+  // Flatten all exercises from all days for counts and validation
+  const allExercises = days.flatMap((d) => d.exercises);
+  const matchedCount = allExercises.filter((e) => e.matched).length;
+  const unmatchedCount = allExercises.filter((e) => !e.matched).length;
+
+  // Build sections for SectionList
+  const sections = days.map((day) => ({
+    title: day.dayLabel,
+    data: day.exercises,
+  }));
 
   async function handleSave() {
     if (!routineName.trim()) {
@@ -39,7 +49,7 @@ export default function ImportReviewScreen() {
       return;
     }
 
-    const unmatched = exercises.filter((e) => !e.matched);
+    const unmatched = allExercises.filter((e) => !e.matched);
     if (unmatched.length > 0) {
       Alert.alert(
         'Unmatched exercises',
@@ -51,21 +61,38 @@ export default function ImportReviewScreen() {
 
     setSaving(true);
     try {
-      const db = getDatabase();
-      const routineInput = {
-        name: routineName.trim(),
-        exercises: exercises.map((ex) => ({
-          exerciseId: ex.matchedExerciseId,
-          targetSets: ex.sets,
-          targetRepsMin: ex.repsMin,
-          targetRepsMax: ex.repsMax,
-          targetRestSeconds: ex.restSeconds,
-        })),
-      };
-      await createRoutine(routineInput);
-      Alert.alert('Saved', `Routine "${routineName.trim()}" created.`, [
-        { text: 'OK', onPress: () => navigation.navigate('More') },
-      ]);
+      if (hasMultipleDays) {
+        const routines = days.map((day) => ({
+          name: day.dayLabel,
+          exercises: day.exercises.map((ex) => ({
+            exerciseId: ex.matchedExerciseId,
+            targetSets: ex.sets,
+            targetRepsMin: ex.repsMin,
+            targetRepsMax: ex.repsMax,
+            targetRestSeconds: ex.restSeconds,
+          })),
+        }));
+        await createRoutinesInFolder(routineName.trim(), routines);
+        Alert.alert('Saved', `Folder "${routineName.trim()}" created with ${days.length} routines.`, [
+          { text: 'OK', onPress: () => navigation.navigate('More') },
+        ]);
+      } else {
+        const db = getDatabase();
+        const routineInput = {
+          name: routineName.trim(),
+          exercises: allExercises.map((ex) => ({
+            exerciseId: ex.matchedExerciseId,
+            targetSets: ex.sets,
+            targetRepsMin: ex.repsMin,
+            targetRepsMax: ex.repsMax,
+            targetRestSeconds: ex.restSeconds,
+          })),
+        };
+        await createRoutine(routineInput);
+        Alert.alert('Saved', `Routine "${routineName.trim()}" created.`, [
+          { text: 'OK', onPress: () => navigation.navigate('More') },
+        ]);
+      }
     } catch (err) {
       Alert.alert('Could not save', err.message);
     } finally {
@@ -101,6 +128,15 @@ export default function ImportReviewScreen() {
         setRoutineName(routineName);
       },
     });
+  }
+
+  function renderSectionHeader({ section }) {
+    if (!hasMultipleDays) return null;
+    return (
+      <View style={styles.dayHeader}>
+        <Text style={styles.dayHeaderText}>{section.title}</Text>
+      </View>
+    );
   }
 
   function renderExercise({ item, index }) {
@@ -157,9 +193,10 @@ export default function ImportReviewScreen() {
       </Section>
 
       <Section title={`Exercises (${matchedCount} matched, ${unmatchedCount} unmatched)`}>
-        <FlatList
-          data={exercises}
+        <SectionList
+          sections={sections}
           renderItem={renderExercise}
+          renderSectionHeader={renderSectionHeader}
           keyExtractor={(item, index) => `${item.name}-${index}`}
           scrollEnabled={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -168,7 +205,7 @@ export default function ImportReviewScreen() {
 
       <View style={styles.footer}>
         <PrimaryButton
-          label={saving ? 'Saving…' : 'Save routine'}
+          label={saving ? 'Saving\u2026' : hasMultipleDays ? 'Save routines' : 'Save routine'}
           onPress={handleSave}
           disabled={saving || unmatchedCount > 0}
         />
@@ -196,6 +233,21 @@ const styles = StyleSheet.create({
   exerciseRow: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,
+  },
+  dayHeader: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  dayHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   matchedRow: {
     backgroundColor: colors.successSoft,

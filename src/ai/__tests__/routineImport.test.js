@@ -122,26 +122,29 @@ describe('importRoutine', () => {
     const result = await importRoutine(db, mockAiConfig, 'My push day routine');
 
     expect(result.routineName).toBe('Push Day');
-    expect(result.exercises).toHaveLength(3);
+    expect(result.hasMultipleDays).toBe(false);
+    expect(result.days).toHaveLength(1);
+    expect(result.days[0].dayLabel).toBe('Full Routine');
+    expect(result.days[0].exercises).toHaveLength(3);
 
     // Bench Press — matched
-    expect(result.exercises[0].name).toBe('Bench Press');
-    expect(result.exercises[0].matched).toBe(true);
-    expect(result.exercises[0].matchedExerciseId).toBeGreaterThan(0);
-    expect(result.exercises[0].sets).toBe(4);
-    expect(result.exercises[0].repsMin).toBe(6);
-    expect(result.exercises[0].repsMax).toBe(10);
-    expect(result.exercises[0].restSeconds).toBe(90);
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBeGreaterThan(0);
+    expect(result.days[0].exercises[0].sets).toBe(4);
+    expect(result.days[0].exercises[0].repsMin).toBe(6);
+    expect(result.days[0].exercises[0].repsMax).toBe(10);
+    expect(result.days[0].exercises[0].restSeconds).toBe(90);
 
     // Squat — matched
-    expect(result.exercises[1].name).toBe('Squat');
-    expect(result.exercises[1].matched).toBe(true);
-    expect(result.exercises[1].matchedExerciseId).toBeGreaterThan(0);
+    expect(result.days[0].exercises[1].name).toBe('Squat');
+    expect(result.days[0].exercises[1].matched).toBe(true);
+    expect(result.days[0].exercises[1].matchedExerciseId).toBeGreaterThan(0);
 
     // Push-Up — unmatched
-    expect(result.exercises[2].name).toBe('Push-Up');
-    expect(result.exercises[2].matched).toBe(false);
-    expect(result.exercises[2].matchedExerciseId).toBeNull();
+    expect(result.days[0].exercises[2].name).toBe('Push-Up');
+    expect(result.days[0].exercises[2].matched).toBe(false);
+    expect(result.days[0].exercises[2].matchedExerciseId).toBeNull();
   });
 
   it('fuzzy-matches "Bench Press" to "Bench Press" in DB (token overlap)', async () => {
@@ -155,8 +158,8 @@ describe('importRoutine', () => {
 
     const result = await importRoutine(db, mockAiConfig, 'Chest day');
 
-    expect(result.exercises[0].matched).toBe(true);
-    expect(result.exercises[0].matchedExerciseId).toBeGreaterThan(0);
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBeGreaterThan(0);
   });
 
   it('does NOT false-match wildly different exercise names', async () => {
@@ -169,8 +172,8 @@ describe('importRoutine', () => {
 
     const result = await importRoutine(db, mockAiConfig, 'Quantum flutter');
 
-    expect(result.exercises[0].matched).toBe(false);
-    expect(result.exercises[0].matchedExerciseId).toBeNull();
+    expect(result.days[0].exercises[0].matched).toBe(false);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBeNull();
   });
 
   it('fetches URL content and sends extracted text to LLM', async () => {
@@ -207,9 +210,10 @@ describe('importRoutine', () => {
     expect(global.fetch.mock.calls[1][0]).toBe('https://api.openai.com/v1/chat/completions');
 
     expect(result.routineName).toBe('My Routine');
-    expect(result.exercises).toHaveLength(1);
-    expect(result.exercises[0].name).toBe('Bench Press');
-    expect(result.exercises[0].matched).toBe(true);
+    expect(result.days).toHaveLength(1);
+    expect(result.days[0].exercises).toHaveLength(1);
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
   });
 
   it('sends pasted text directly to LLM without fetching', async () => {
@@ -241,7 +245,7 @@ describe('importRoutine', () => {
     const result = await importRoutine(db, mockAiConfig, 'Some routine text');
 
     expect(result.routineName).toBe('');
-    expect(result.exercises).toHaveLength(0);
+    expect(result.days).toHaveLength(0);
     expect(result._rawText).toBe('This is not JSON at all');
   });
 
@@ -333,7 +337,7 @@ describe('importRoutine', () => {
     const result = await importRoutine(db, mockAiConfig, 'https://example.com');
 
     expect(result.routineName).toBe('Push Day');
-    expect(result.exercises).toHaveLength(2);
+    expect(result.days[0].exercises).toHaveLength(2);
   });
 
   it('uses default values when LLM omits optional fields', async () => {
@@ -346,10 +350,10 @@ describe('importRoutine', () => {
 
     const result = await importRoutine(db, mockAiConfig, 'Bench Press');
 
-    expect(result.exercises[0].sets).toBe(3);
-    expect(result.exercises[0].repsMin).toBe(5);
-    expect(result.exercises[0].repsMax).toBe(12);
-    expect(result.exercises[0].restSeconds).toBe(90);
+    expect(result.days[0].exercises[0].sets).toBe(3);
+    expect(result.days[0].exercises[0].repsMin).toBe(5);
+    expect(result.days[0].exercises[0].repsMax).toBe(12);
+    expect(result.days[0].exercises[0].restSeconds).toBe(90);
   });
 
   it('uses "Imported Routine" as fallback name when LLM omits routineName', async () => {
@@ -362,5 +366,138 @@ describe('importRoutine', () => {
     const result = await importRoutine(db, mockAiConfig, 'Some text');
 
     expect(result.routineName).toBe('Imported Routine');
+  });
+
+  // --- Multi-day tests ---
+
+  it('handles multi-day import with hasMultipleDays: true', async () => {
+    mockLLMResponse({
+      routineName: 'Jeff Nippard Push Pull',
+      hasMultipleDays: true,
+      days: [
+        {
+          dayLabel: 'Day 1 - Push',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+            { name: 'Squat', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 120 },
+          ],
+        },
+        {
+          dayLabel: 'Day 2 - Pull',
+          exercises: [
+            { name: 'Deadlift', sets: 3, repsMin: 5, repsMax: 8, restSeconds: 150 },
+            { name: 'Pull-Up', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Jeff Nippard Push Pull routine');
+
+    expect(result.routineName).toBe('Jeff Nippard Push Pull');
+    expect(result.hasMultipleDays).toBe(true);
+    expect(result.days).toHaveLength(2);
+
+    // Day 1
+    expect(result.days[0].dayLabel).toBe('Day 1 - Push');
+    expect(result.days[0].exercises).toHaveLength(2);
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[1].name).toBe('Squat');
+    expect(result.days[0].exercises[1].matched).toBe(true);
+
+    // Day 2
+    expect(result.days[1].dayLabel).toBe('Day 2 - Pull');
+    expect(result.days[1].exercises).toHaveLength(2);
+    expect(result.days[1].exercises[0].name).toBe('Deadlift');
+    expect(result.days[1].exercises[0].matched).toBe(true);
+    expect(result.days[1].exercises[1].name).toBe('Pull-Up');
+    expect(result.days[1].exercises[1].matched).toBe(true);
+  });
+
+  it('handles multi-day import with unmatched exercises in some days', async () => {
+    mockLLMResponse({
+      routineName: 'Mixed Multi-Day',
+      hasMultipleDays: true,
+      days: [
+        {
+          dayLabel: 'Day 1',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+            { name: 'Unknown Exercise', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+          ],
+        },
+        {
+          dayLabel: 'Day 2',
+          exercises: [
+            { name: 'Squat', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 120 },
+            { name: 'Mystery Move', sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Mixed multi-day routine');
+
+    expect(result.hasMultipleDays).toBe(true);
+    expect(result.days).toHaveLength(2);
+
+    // Day 1: Bench Press matched, Unknown Exercise unmatched
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[1].matched).toBe(false);
+
+    // Day 2: Squat matched, Mystery Move unmatched
+    expect(result.days[1].exercises[0].matched).toBe(true);
+    expect(result.days[1].exercises[1].matched).toBe(false);
+  });
+
+  it('handles single-day backward compatibility with flat exercises array', async () => {
+    // Old format: no hasMultipleDays, no days array, just exercises
+    mockLLMResponse({
+      routineName: 'Old Format Routine',
+      exercises: [
+        { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+        { name: 'Squat', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 120 },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Old format routine');
+
+    // Should be treated as single day
+    expect(result.routineName).toBe('Old Format Routine');
+    expect(result.hasMultipleDays).toBe(false);
+    expect(result.days).toHaveLength(1);
+    expect(result.days[0].dayLabel).toBe('Full Routine');
+    expect(result.days[0].exercises).toHaveLength(2);
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[1].name).toBe('Squat');
+    expect(result.days[0].exercises[1].matched).toBe(true);
+  });
+
+  it('handles multi-day import with hasMultipleDays: true and days array', async () => {
+    // New format: hasMultipleDays + days array
+    mockLLMResponse({
+      routineName: 'New Format Routine',
+      hasMultipleDays: true,
+      days: [
+        {
+          dayLabel: 'Upper Body',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'New format routine');
+
+    expect(result.routineName).toBe('New Format Routine');
+    expect(result.hasMultipleDays).toBe(true);
+    expect(result.days).toHaveLength(1);
+    expect(result.days[0].dayLabel).toBe('Upper Body');
+    expect(result.days[0].exercises).toHaveLength(1);
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
   });
 });
