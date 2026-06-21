@@ -11,6 +11,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 
 import AddExerciseModal from '../../components/AddExerciseModal.js';
 import ExerciseSessionCard from '../../components/ExerciseSessionCard.js';
+import SupersetInterlacedCard from '../../components/SupersetInterlacedCard.js';
 import RestTimer from '../../components/RestTimer.js';
 import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useExerciseStore } from '../../stores/exerciseStore.js';
@@ -132,22 +133,64 @@ export default function LiveSession({ navigation }) {
               <Text style={styles.firstHintText}>Add your first exercise to start logging.</Text>
             </View>
           ) : null}
-          {activeSession.exercises.map((entry, i) => (
-            <ExerciseSessionCard
-              key={entry.id}
-              entry={entry}
-              index={i}
-              totalExercises={activeSession.exercises.length}
-              onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
-              onCompleteSet={(setId) => toggleCompleteSet(setId)}
-              onCycleType={(setId) => cycleSetType(setId)}
-              onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
-              onAddSet={(weId) => addSet(weId)}
-              onDeleteSet={(setId) => deleteSet(setId)}
-              onMenuAction={handleMenuAction}
-              onSaveNotes={(weId, notes) => setExerciseNotes(weId, notes)}
-            />
-          ))}
+          {(() => {
+            // Group exercises by supersetGroupId for interlaced rendering.
+            const groups = [];
+            const standalone = [];
+            for (let i = 0; i < activeSession.exercises.length; i++) {
+              const entry = activeSession.exercises[i];
+              if (entry.supersetGroupId != null) {
+                // Find or create a group for this supersetGroupId.
+                let group = groups.find((g) => g.groupId === entry.supersetGroupId);
+                if (!group) {
+                  group = { groupId: entry.supersetGroupId, entries: [], startIndex: i };
+                  groups.push(group);
+                }
+                group.entries.push({ entry, index: i });
+              } else {
+                standalone.push({ entry, index: i });
+              }
+            }
+            // Render standalone exercises as individual cards.
+            const elements = [];
+            for (const { entry, index } of standalone) {
+              elements.push(
+                <ExerciseSessionCard
+                  key={entry.id}
+                  entry={entry}
+                  index={index}
+                  totalExercises={activeSession.exercises.length}
+                  onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
+                  onCompleteSet={(setId) => toggleCompleteSet(setId)}
+                  onCycleType={(setId) => cycleSetType(setId)}
+                  onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
+                  onAddSet={(weId) => addSet(weId)}
+                  onDeleteSet={(setId) => deleteSet(setId)}
+                  onMenuAction={handleMenuAction}
+                  onSaveNotes={(weId, notes) => setExerciseNotes(weId, notes)}
+                />,
+              );
+            }
+            // Render superset groups as interlaced cards.
+            for (const group of groups) {
+              elements.push(
+                <SupersetInterlacedCard
+                  key={`superset-${group.groupId}`}
+                  groupedExercises={group.entries}
+                  totalExercises={activeSession.exercises.length}
+                  onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
+                  onCompleteSet={(setId) => toggleCompleteSet(setId)}
+                  onCycleType={(setId) => cycleSetType(setId)}
+                  onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
+                  onAddSet={(weId) => addSet(weId)}
+                  onDeleteSet={(setId) => deleteSet(setId)}
+                  onMenuAction={handleMenuAction}
+                  onSaveNotes={(weId, notes) => setExerciseNotes(weId, notes)}
+                />,
+              );
+            }
+            return elements;
+          })()}
         </ScrollView>
       </KeyboardAvoidingView>
 
