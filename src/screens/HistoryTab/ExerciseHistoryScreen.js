@@ -4,12 +4,12 @@
 // markers. Lives in HistoryTab per the AGENTS.md layout; it is reused by the
 // History tab's own search entry in issue #6.
 
+import { useSettingsStore } from '../../stores/settingsStore.js';
+import { kgToDisplay, displayNumber } from '../../utils/formatters.js';
+import { colors, radius, spacing } from '../../theme.js';
+import { useExerciseStore } from '../../stores/exerciseStore.js';
 import { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-
-import { useExerciseStore } from '../../stores/exerciseStore.js';
-import { colors, radius, spacing } from '../../theme.js';
-
 const SET_LABELS = {
   normal: null,
   warmup: { letter: 'W', color: colors.warning },
@@ -31,6 +31,7 @@ export default function ExerciseHistoryScreen({ route }) {
   const { exerciseId, exerciseName } = route.params;
   const history = useExerciseStore((s) => s.currentHistory);
   const loadHistory = useExerciseStore((s) => s.loadHistory);
+  const unit = useSettingsStore((s) => s.unit);
 
   useEffect(() => {
     loadHistory(exerciseId);
@@ -64,7 +65,7 @@ export default function ExerciseHistoryScreen({ route }) {
                   <View key={set.id ?? i} style={styles.setRow}>
                     <Text style={styles.setIndex}>{i + 1}</Text>
                     <Text style={styles.setDetail}>
-                      {set.weight != null ? `${set.weight}` : '—'}
+                      {set.weight != null ? `${displayNumber(kgToDisplay(set.weight, unit))} ${unit}` : '—'}
                       <Text style={styles.setUnit}> × </Text>
                       {set.reps != null ? `${set.reps}` : '—'} reps
                     </Text>

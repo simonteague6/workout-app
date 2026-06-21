@@ -43,7 +43,7 @@ export function displayToKg(value, displayUnit) {
 }
 
 /** Round to 1 decimal place, then drop a trailing ".0" for clean labels. */
-function displayNumber(value) {
+export function displayNumber(value) {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }

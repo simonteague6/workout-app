@@ -1,12 +1,13 @@
 // SessionDetail — shows a completed session's details: date, duration, volume,
 // exercises with their sets (weight × reps, set type markers).
 
-import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-
+import { useSettingsStore } from '../../stores/settingsStore.js';
+import { kgToDisplay, displayNumber } from '../../utils/formatters.js';
+import { colors, radius, spacing } from '../../theme.js';
 import { getDatabase } from '../../utils/db.js';
 import { getSessionDetail } from '../../db/queries/analyticsQueries.js';
-import { colors, radius, spacing } from '../../theme.js';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const SET_LABELS = {
   normal: null,
@@ -47,6 +48,7 @@ function formatDuration(seconds) {
  */
 export default function SessionDetail({ route }) {
   const { sessionId } = route.params;
+  const unit = useSettingsStore((s) => s.unit);
   const [session, setSession] = useState(null);
 
   useEffect(() => {
@@ -123,7 +125,7 @@ export default function SessionDetail({ route }) {
                     )}
                   </View>
                   <Text style={styles.setValue}>
-                    {set.weight != null ? set.weight : '-'}
+                    {set.weight != null ? `${displayNumber(kgToDisplay(set.weight, unit))} ${unit}` : '-'}
                   </Text>
                   <Text style={styles.setValue}>
                     {set.reps != null ? set.reps : '-'}
