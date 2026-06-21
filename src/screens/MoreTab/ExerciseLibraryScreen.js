@@ -10,11 +10,14 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import ExerciseLibraryList from '../../components/ExerciseLibraryList.js';
 import { colors, spacing } from '../../theme.js';
+import { useSettingsStore } from '../../stores/settingsStore.js';
 
 /**
  * @param {{ navigation: import('@react-navigation/native').NavigationProp }} props
  */
 export default function ExerciseLibraryScreen({ navigation }) {
+  const searchBarPosition = useSettingsStore((s) => s.searchBarPosition);
+
   // Header "+" to create a custom exercise, in addition to the in-list affordance.
   useEffect(() => {
     navigation.setOptions({
@@ -28,6 +31,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
 
   return (
     <ExerciseLibraryList
+      searchBarPosition={searchBarPosition}
       onSelectExercise={(id) => navigation.navigate('ExerciseDetail', { exerciseId: id })}
       onEditExercise={(id) => navigation.navigate('ExerciseEditor', { exerciseId: id })}
       onCreateExercise={() => navigation.navigate('ExerciseEditor')}

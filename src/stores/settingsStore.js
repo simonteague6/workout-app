@@ -24,6 +24,7 @@ import {
 
 export const UNITS = Object.freeze({ LBS: 'lbs', KG: 'kg' });
 export const THEME = Object.freeze({ LIGHT: 'light', DARK: 'dark', SYSTEM: 'system' });
+export const SEARCH_BAR_POSITIONS = Object.freeze({ TOP: 'top', BOTTOM: 'bottom' });
 export const AI_PROVIDERS = Object.freeze({
   OPENAI: 'openai',
   OPENROUTER: 'openrouter',
@@ -34,6 +35,7 @@ export const AI_PROVIDERS = Object.freeze({
 const VALID_UNITS = Object.values(UNITS);
 const VALID_THEMES = Object.values(THEME);
 const VALID_PROVIDERS = Object.values(AI_PROVIDERS);
+const VALID_SEARCH_BAR_POSITIONS = Object.values(SEARCH_BAR_POSITIONS);
 
 /**
  * @typedef {Object} SettingsStoreState
@@ -41,6 +43,7 @@ const VALID_PROVIDERS = Object.values(AI_PROVIDERS);
  * @property {'light'|'dark'|'system'} theme
  * @property {number} defaultRestSeconds  app-wide default rest timer (fallback)
  * @property {number} defaultIncrement    app-wide default weight increment
+ * @property {'top'|'bottom'} searchBarPosition
  * @property {{provider?: string|null, apiKey?: string|null, model?: string|null, endpoint?: string|null}} ai
  */
 
@@ -60,6 +63,7 @@ export const useSettingsStore = create((set, get) => ({
   theme: THEME.SYSTEM,
   defaultRestSeconds: 120,
   defaultIncrement: 2.5,
+  searchBarPosition: 'top',
   ai: { provider: null, apiKey: null, model: null, endpoint: null },
 
   // -- actions --------------------------------------------------------------
@@ -101,6 +105,15 @@ export const useSettingsStore = create((set, get) => ({
     set({ defaultIncrement: n });
   },
 
+  setSearchBarPosition: (position) => {
+    if (!VALID_SEARCH_BAR_POSITIONS.includes(position)) {
+      throw new Error(`settingsStore.setSearchBarPosition: invalid position "${position}"`);
+    }
+    const db = dbOrNull();
+    if (db) setSetting(db, 'searchBarPosition', position);
+    set({ searchBarPosition: position });
+  },
+
   // Partial patch: { provider?, apiKey?, model?, endpoint? }. Persists
   // non-secret fields to app_settings and the API key to the keystore.
   setAiConfig: async (config) => {
@@ -135,6 +148,7 @@ export const useSettingsStore = create((set, get) => ({
     const next = {};
     if (all.theme) next.theme = all.theme;
     if (all.unit) next.unit = all.unit;
+    if (all.searchBarPosition) next.searchBarPosition = all.searchBarPosition;
     if (all.defaultRestSeconds != null) next.defaultRestSeconds = Number(all.defaultRestSeconds);
     if (all.defaultIncrement != null) next.defaultIncrement = Number(all.defaultIncrement);
     next.ai = {
