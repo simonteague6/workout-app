@@ -13,6 +13,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useRoutineStore } from '../../stores/routineStore.js';
 import { colors, radius, spacing } from '../../theme.js';
+export default function StartScreen({ navigation }) {
 
   const insets = useSafeAreaInsets();
   const activeSession = useWorkoutStore((s) => s.activeSession);
