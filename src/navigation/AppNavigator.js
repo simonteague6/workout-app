@@ -18,6 +18,9 @@ import ExerciseHistoryScreen from '../screens/HistoryTab/ExerciseHistoryScreen.j
 import SessionDetail from '../screens/HistoryTab/SessionDetail.js';
 import AppearanceSettings from '../screens/MoreTab/AppearanceSettings.js';
 import AISettings from '../screens/MoreTab/AISettings.js';
+import ImportRoutineScreen from '../screens/MoreTab/ImportRoutineScreen.js';
+import ImportReviewScreen from '../screens/MoreTab/ImportReviewScreen.js';
+import OnboardingScreen from '../screens/MoreTab/OnboardingScreen.js';
 import DataScreen from '../screens/MoreTab/DataScreen.js';
 import { useAppTheme } from '../utils/theme.js';
 
@@ -120,6 +123,9 @@ function MoreStack() {
         component={ExerciseHistoryScreen}
         options={({ route }) => ({ title: route.params?.exerciseName ?? 'Exercise history' })}
       />
+      <Stack.Screen name="ImportRoutine" component={ImportRoutineScreen} options={{ title: 'Import routine' }} />
+      <Stack.Screen name="ImportReview" component={ImportReviewScreen} options={{ title: 'Review import' }} />
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ title: 'Welcome', headerShown: false }} />
       <Stack.Screen name="Appearance" component={AppearanceSettings} options={{ title: 'Appearance' }} />
       <Stack.Screen name="AISettings" component={AISettings} options={{ title: 'AI & API Keys' }} />
       <Stack.Screen name="Data" component={DataScreen} options={{ title: 'Data' }} />

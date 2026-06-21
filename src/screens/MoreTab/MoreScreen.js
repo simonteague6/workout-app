@@ -12,6 +12,9 @@ export default function MoreScreen() {
       <Section title="Exercises">
         <NavRow label="Exercise Library" onPress={() => navigation.navigate('ExerciseLibrary')} last />
       </Section>
+      <Section title="AI">
+        <NavRow label="Import Routine" onPress={() => navigation.navigate('ImportRoutine')} last />
+      </Section>
       <Section title="Settings">
         <NavRow label="Appearance" onPress={() => navigation.navigate('Appearance')} />
         <NavRow label="AI & API Keys" onPress={() => navigation.navigate('AISettings')} last />
