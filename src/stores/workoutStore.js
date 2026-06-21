@@ -178,7 +178,7 @@ export const useWorkoutStore = create((set, get) => ({
         db.execute(
           `INSERT INTO exercise_set (workout_exercise_id, sort_order, weight, reps, set_type, is_completed)
              VALUES (?, ?, ?, ?, 'normal', 0)`,
-          [we.id, i, lastSets[i]?.weight ?? null, re.target_reps_max ?? null],
+          [we.id, i, lastSets[i]?.weight ?? null, re.target_reps_max || null],
         );
       }
     }
@@ -305,6 +305,11 @@ export const useWorkoutStore = create((set, get) => ({
     const state = get();
     const { set: setRow, entry } = findSet(state, setId);
     if (!setRow || !entry) throw new Error('workoutStore.completeSet: set not found');
+
+    // Validate: non-warmup sets must have reps > 0.
+    if (setRow.set_type !== 'warmup' && (setRow.reps == null || setRow.reps === 0)) {
+      throw new Error('Cannot complete a set with 0 reps');
+    }
 
     const duration = restDuration ?? shouldStartRestTimer(state, setRow, entry);
     const completed = sessionQueries.completeSet(db, setId, { restDuration: duration });

@@ -136,6 +136,7 @@ describe('workoutStore — completeSet + rest timer', () => {
     await useWorkoutStore.getState().startFreeFlow();
     const we = await useWorkoutStore.getState().addExercise(bench.id);
     const set = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 8 });
     const completed = await useWorkoutStore.getState().completeSet(set.id);
     expect(completed.is_completed).toBe(1);
     const state = useWorkoutStore.getState();
@@ -155,14 +156,17 @@ describe('workoutStore — completeSet + rest timer', () => {
     expect(state.restTimerEndsAt).toBeNull();
     expect(state.restTimerTotalSeconds).toBe(0);
   });
-
   it('rest timer only fires after the last drop in a contiguous drop group', async () => {
     const bench = findExercise(db, 'Barbell Bench Press');
     await useWorkoutStore.getState().startFreeFlow();
     const we = await useWorkoutStore.getState().addExercise(bench.id);
-    await useWorkoutStore.getState().addSet(we.id);
+    const s1 = await useWorkoutStore.getState().addSet(we.id);
     const s2 = await useWorkoutStore.getState().addSet(we.id);
     const s3 = await useWorkoutStore.getState().addSet(we.id);
+    // Set reps on all sets so they pass validation.
+    await useWorkoutStore.getState().updateSetFields(s1.id, { reps: 8 });
+    await useWorkoutStore.getState().updateSetFields(s2.id, { reps: 8 });
+    await useWorkoutStore.getState().updateSetFields(s3.id, { reps: 8 });
     // s2 and s3 are drop sets (a drop group of 2).
     await useWorkoutStore.getState().cycleSetType(s2.id); // -> warmup
     await useWorkoutStore.getState().cycleSetType(s2.id); // -> dropset
@@ -180,6 +184,7 @@ describe('workoutStore — completeSet + rest timer', () => {
     await useWorkoutStore.getState().startFreeFlow();
     const we = await useWorkoutStore.getState().addExercise(bench.id);
     const set = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 8 });
     await useWorkoutStore.getState().completeSet(set.id);
     const before = useWorkoutStore.getState().restTimerEndsAt;
     await useWorkoutStore.getState().addRestTime(30);
@@ -260,6 +265,8 @@ describe('workoutStore — supersets', () => {
 
     const aSet = await useWorkoutStore.getState().addSet(a.id);
     const bSet = await useWorkoutStore.getState().addSet(b.id);
+    await useWorkoutStore.getState().updateSetFields(aSet.id, { reps: 8 });
+    await useWorkoutStore.getState().updateSetFields(bSet.id, { reps: 8 });
     await useWorkoutStore.getState().completeSet(aSet.id); // partner not done -> no timer
     expect(useWorkoutStore.getState().restTimerEndsAt).toBeNull();
     await useWorkoutStore.getState().completeSet(bSet.id); // both done -> shared timer
@@ -396,5 +403,95 @@ describe('workoutStore — substituteExercise (routine-driven)', () => {
     const diff = getRoutineSessionDiff(getDatabase(), routine.id, after.id);
     expect(diff.find((d) => d.type === 'substituted')).toBeDefined();
     expect(diff.find((d) => d.type === 'matched')).toBeUndefined();
+  });
+});
+
+describe('workoutStore — 0-rep validation', () => {
+  it('throws when completing a non-warmup set with 0 reps', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    await useWorkoutStore.getState().startFreeFlow();
+    const we = await useWorkoutStore.getState().addExercise(bench.id);
+    const set = await useWorkoutStore.getState().addSet(we.id);
+    // Set reps to 0
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 0 });
+    await expect(useWorkoutStore.getState().completeSet(set.id)).rejects.toThrow(
+      'Cannot complete a set with 0 reps',
+    );
+  });
+
+  it('throws when completing a non-warmup set with null reps', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    await useWorkoutStore.getState().startFreeFlow();
+    const we = await useWorkoutStore.getState().addExercise(bench.id);
+    const set = await useWorkoutStore.getState().addSet(we.id);
+    // Set reps to null explicitly
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: null });
+    await expect(useWorkoutStore.getState().completeSet(set.id)).rejects.toThrow(
+      'Cannot complete a set with 0 reps',
+    );
+  });
+
+  it('allows completing a warmup set with 0 reps', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    await useWorkoutStore.getState().startFreeFlow();
+    const we = await useWorkoutStore.getState().addExercise(bench.id);
+    const set = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().cycleSetType(set.id); // normal -> warmup
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 0 });
+    const completed = await useWorkoutStore.getState().completeSet(set.id);
+    expect(completed.is_completed).toBe(1);
+  });
+
+  it('allows completing a normal set with reps > 0 (regression)', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    await useWorkoutStore.getState().startFreeFlow();
+    const we = await useWorkoutStore.getState().addExercise(bench.id);
+    const set = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 8 });
+    const completed = await useWorkoutStore.getState().completeSet(set.id);
+    expect(completed.is_completed).toBe(1);
+  });
+
+  it('toggleCompleteSet also validates reps when completing (delegates to completeSet)', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    await useWorkoutStore.getState().startFreeFlow();
+    const we = await useWorkoutStore.getState().addExercise(bench.id);
+    const set = await useWorkoutStore.getState().addSet(we.id);
+    await useWorkoutStore.getState().updateSetFields(set.id, { reps: 0 });
+    await expect(useWorkoutStore.getState().toggleCompleteSet(set.id)).rejects.toThrow(
+      'Cannot complete a set with 0 reps',
+    );
+  });
+});
+
+describe('workoutStore — reps pre-fill from routine', () => {
+  it('pre-fills reps as null when target_reps_max is 0', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const routine = await useRoutineStore.getState().createRoutine({
+      name: 'Zero Reps Test',
+      exercises: [
+        { exerciseId: bench.id, targetSets: 2, targetRepsMin: 0, targetRepsMax: 0, targetRestSeconds: 90 },
+      ],
+    });
+    const session = await useWorkoutStore.getState().startFromRoutine(routine.id);
+    const entry = session.exercises[0];
+    expect(entry.sets).toHaveLength(2);
+    expect(entry.sets[0].reps).toBeNull();
+    expect(entry.sets[1].reps).toBeNull();
+  });
+
+  it('pre-fills reps correctly when target_reps_max is a valid number > 0 (regression)', async () => {
+    const bench = findExercise(db, 'Barbell Bench Press');
+    const routine = await useRoutineStore.getState().createRoutine({
+      name: 'Valid Reps Test',
+      exercises: [
+        { exerciseId: bench.id, targetSets: 2, targetRepsMin: 5, targetRepsMax: 8, targetRestSeconds: 90 },
+      ],
+    });
+    const session = await useWorkoutStore.getState().startFromRoutine(routine.id);
+    const entry = session.exercises[0];
+    expect(entry.sets).toHaveLength(2);
+    expect(entry.sets[0].reps).toBe(8);
+    expect(entry.sets[1].reps).toBe(8);
   });
 });
