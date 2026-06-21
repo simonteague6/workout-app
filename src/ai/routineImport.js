@@ -152,18 +152,20 @@ function stripHTML(html) {
 }
 
 /**
- * Find an exact (case-insensitive) name match in the Exercise table.
+ * Find a fuzzy match for an exercise name in the Exercise table.
+ * Uses token-based scoring: exact word match (+3), prefix match (+2),
+ * substring match (+1). Returns the top result if its score >= 3.
  * @param {import('../utils/db.js').DbAdapter} db
  * @param {string} name
  * @returns {{ id: number, name: string }|null}
  */
 function findExactMatch(db, name) {
-  const results = searchExercises(db, { query: name, limit: 10 });
-  const lower = name.toLowerCase();
-  for (const row of results) {
-    if (row.name.toLowerCase() === lower) {
-      return { id: row.id, name: row.name };
-    }
+  const results = searchExercises(db, { query: name, limit: 5 });
+  if (results.length === 0) return null;
+  // A score >= 3 means at least one exact word match (or a combination of
+  // prefix matches that strongly indicates the right exercise).
+  if (results[0]._matchScore >= 3) {
+    return { id: results[0].id, name: results[0].name };
   }
   return null;
 }

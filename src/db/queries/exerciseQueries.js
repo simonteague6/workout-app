@@ -116,10 +116,6 @@ export function searchExercises(db, params = {}) {
   const sqlParams = [];
 
   if (!includeArchived) where.push('e.is_archived = 0');
-  if (query && query.trim()) {
-    where.push('e.name LIKE ?');
-    sqlParams.push(`%${query.trim()}%`);
-  }
   if (muscleGroupId != null) {
     where.push('(e.primary_muscle_group_id = ? OR e.secondary_muscle_group_id = ?)');
     sqlParams.push(muscleGroupId, muscleGroupId);
@@ -134,8 +130,26 @@ export function searchExercises(db, params = {}) {
   }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const limitClause = limit != null ? `LIMIT ${Number(limit)}` : '';
 
+  // When query is empty, use the original SQL ordering (usage_count DESC, name ASC)
+  // and apply limit in SQL for efficiency.
+  if (!query || !query.trim()) {
+    const limitClause = limit != null ? `LIMIT ${Number(limit)}` : '';
+    const sql = `
+      SELECT ${RESOLVED_SELECT}
+        FROM exercise e
+        ${NAME_JOINS}
+        ${USAGE_SUBQUERY}
+        ${whereClause}
+        ORDER BY usage_count DESC, e.name COLLATE NOCASE ASC
+        ${limitClause}
+    `;
+    const { rows } = db.execute(sql, sqlParams);
+    return rows;
+  }
+
+  // For non-empty queries, fetch all matching (by other filters) exercises,
+  // then score each in JS for token-based fuzzy matching.
   const sql = `
     SELECT ${RESOLVED_SELECT}
       FROM exercise e
@@ -143,10 +157,79 @@ export function searchExercises(db, params = {}) {
       ${USAGE_SUBQUERY}
       ${whereClause}
       ORDER BY usage_count DESC, e.name COLLATE NOCASE ASC
-      ${limitClause}
   `;
   const { rows } = db.execute(sql, sqlParams);
-  return rows;
+
+  const queryTokens = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  /**
+   * Score an exercise name against the query tokens.
+   *   Exact word match:  +3
+   *   Prefix match:      +2
+   *   Substring match:   +1
+   * If a token doesn't match any individual word, it gets +1 if it's a
+   * substring of the full name (handles concatenated tokens like "benchpres").
+   */
+  function scoreName(name, tokens) {
+    const lower = name.toLowerCase();
+    const words = lower.split(/\s+/).filter(Boolean);
+    // Concatenated version of the name (no spaces) for matching tokens that
+    // span word boundaries, e.g. "benchpres" in "Barbell Bench Press".
+    const concat = words.join('');
+    let score = 0;
+    for (const token of tokens) {
+      let matched = false;
+      for (const word of words) {
+        if (word === token) {
+          score += 3;
+          matched = true;
+          break;
+        }
+        if (word.startsWith(token)) {
+          score += 2;
+          matched = true;
+          break;
+        }
+        if (word.includes(token)) {
+          score += 1;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        // Check against the full name (with spaces) as a substring fallback
+        if (lower.includes(token)) {
+          score += 1;
+        // Check against the concatenated name (no spaces) for cross-word tokens
+        } else if (concat.includes(token)) {
+          score += 1;
+        }
+      }
+    }
+    return score;
+  }
+
+  const scored = rows
+    .map((row) => ({
+      ...row,
+      _matchScore: scoreName(row.name, queryTokens),
+    }))
+    .filter((row) => row._matchScore > 0)
+    .sort((a, b) => {
+      // Sort by match score DESC, then usage_count DESC, then name ASC
+      if (b._matchScore !== a._matchScore) return b._matchScore - a._matchScore;
+      if (b.usage_count !== a.usage_count) return b.usage_count - a.usage_count;
+      return a.name.localeCompare(b.name);
+    });
+
+  if (limit != null) {
+    return scored.slice(0, Number(limit));
+  }
+  return scored;
 }
 
 /**
