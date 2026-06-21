@@ -6,7 +6,36 @@
 // extraction, JSON parsing, exercise matching) is tested for real.
 
 import { searchExercises } from '../db/queries/exerciseQueries.js';
-import { sendAIRequest } from './aiClient.js';
+import { sendAIRequest, sendAIRequestWithTools, supportsToolUse } from './aiClient.js';
+
+/**
+ * Tool definition for the search_exercises tool.
+ * LLM calls this to look up exercises in the database during agentic import.
+ */
+const SEARCH_TOOL = {
+  name: 'search_exercises',
+  description: 'Search the exercise database by name. Returns matching exercises with their IDs, names, muscle groups, and equipment.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Exercise name or partial name to search for' },
+    },
+    required: ['query'],
+  },
+};
+
+/** OpenAI-compatible tool format wrapper. */
+const OPENAI_TOOLS = [{
+  type: 'function',
+  function: SEARCH_TOOL,
+}];
+
+/** Anthropic tool-use format wrapper. */
+const ANTHROPIC_TOOLS = [{
+  name: SEARCH_TOOL.name,
+  description: SEARCH_TOOL.description,
+  input_schema: SEARCH_TOOL.parameters,
+}];
 
 /**
  * @typedef {Object} ImportResult
@@ -51,25 +80,64 @@ export async function importRoutine(db, aiConfig, input) {
   }
 
   // Step 2: Build system prompt
-  const systemPrompt =
+  const agenticPrompt =
+    'You are a fitness routine parser. Extract the workout routine as JSON with this schema: ' +
+    '{ routineName: string, hasMultipleDays: boolean, days: [{ dayLabel: string, exercises: [{ name: string, sets: number, repsMin: number, repsMax: number, restSeconds: number, exerciseId: number|null }] }] }.\n\n' +
+    'For each exercise, use the search_exercises tool to find matching exercises in the database. ' +
+    'Set exerciseId to the ID of the matched exercise, or null if no match is found. ' +
+    'Return ONLY valid JSON with no additional text.';
+
+  const nonAgenticPrompt =
     'You are a fitness routine parser. Extract the workout routine as JSON with this schema: ' +
     '{ routineName: string, hasMultipleDays: boolean, days: [{ dayLabel: string, exercises: [{ name: string, sets: number, repsMin: number, repsMax: number, restSeconds: number }] }] }';
 
-  // Step 3: Call LLM
+  // Step 3: Call LLM — agentic mode if supported, non-agentic otherwise
   let parsed;
-  try {
-    parsed = await sendAIRequest(aiConfig, systemPrompt, content);
-  } catch (err) {
-    // If the error contains raw text (non-JSON), surface it for manual entry
-    if (err.message && err.message.startsWith('AI response was not valid JSON')) {
-      return {
-        routineName: '',
-        hasMultipleDays: false,
-        days: [],
-        _rawText: err.message.replace('AI response was not valid JSON:\n', ''),
-      };
+  let agenticMode = false;
+
+  if (supportsToolUse(aiConfig)) {
+    try {
+      const tools = aiConfig.provider === 'anthropic' ? ANTHROPIC_TOOLS : OPENAI_TOOLS;
+      parsed = await sendAIRequestWithTools(
+        aiConfig,
+        agenticPrompt,
+        content,
+        tools,
+        async (toolName, args) => {
+          if (toolName === 'search_exercises') {
+            const results = searchExercises(db, { query: args.query, limit: 10 });
+            return results.map((e) => ({
+              id: e.id,
+              name: e.name,
+              muscleGroup: e.primary_muscle,
+              equipment: e.equipment,
+            }));
+          }
+          return null;
+        },
+      );
+      agenticMode = true;
+    } catch (err) {
+      // Agentic mode failed — fall back to non-agentic
+      agenticMode = false;
     }
-    throw err;
+  }
+
+  if (!agenticMode) {
+    try {
+      parsed = await sendAIRequest(aiConfig, nonAgenticPrompt, content);
+    } catch (err) {
+      // If the error contains raw text (non-JSON), surface it for manual entry
+      if (err.message && err.message.startsWith('AI response was not valid JSON')) {
+        return {
+          routineName: '',
+          hasMultipleDays: false,
+          days: [],
+          _rawText: err.message.replace('AI response was not valid JSON:\n', ''),
+        };
+      }
+      throw err;
+    }
   }
 
   // Validate parsed structure
@@ -101,17 +169,31 @@ export async function importRoutine(db, aiConfig, input) {
       const name = (ex.name || '').toString().trim();
       if (!name) continue;
 
-      const matched = findExactMatch(db, name);
-      exercises.push({
-        name,
-        sets: Number(ex.sets) || 3,
-        repsMin: Number(ex.repsMin) || 5,
-        repsMax: Number(ex.repsMax) || 12,
-        restSeconds: Number(ex.restSeconds) || 90,
-        matchedExerciseName: matched ? matched.name : null,
-        matchedExerciseId: matched ? matched.id : null,
-        matched: !!matched,
-      });
+      // In agentic mode, the LLM provides exerciseId directly
+      if (agenticMode && ex.exerciseId != null) {
+        exercises.push({
+          name,
+          sets: Number(ex.sets) || 3,
+          repsMin: Number(ex.repsMin) || 5,
+          repsMax: Number(ex.repsMax) || 12,
+          restSeconds: Number(ex.restSeconds) || 90,
+          matchedExerciseName: name,
+          matchedExerciseId: Number(ex.exerciseId),
+          matched: true,
+        });
+      } else {
+        const matched = findExactMatch(db, name);
+        exercises.push({
+          name,
+          sets: Number(ex.sets) || 3,
+          repsMin: Number(ex.repsMin) || 5,
+          repsMax: Number(ex.repsMax) || 12,
+          restSeconds: Number(ex.restSeconds) || 90,
+          matchedExerciseName: matched ? matched.name : null,
+          matchedExerciseId: matched ? matched.id : null,
+          matched: !!matched,
+        });
+      }
     }
     days.push({ dayLabel, exercises });
   }

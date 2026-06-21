@@ -4,11 +4,120 @@
 // pipeline with mocked LLM responses. The AI client is mocked; the pipeline
 // logic (text extraction, JSON parsing, exercise matching) is tested for real.
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+
+// Mock sendAIRequestWithTools so agentic tests can control its return value.
+// sendAIRequest and supportsToolUse use inline implementations that mirror
+// the real module (calls fetch() which tests mock via global.fetch).
+jest.mock('../aiClient.js', () => {
+  const DEFAULT_BASE_URLS = Object.freeze({
+    openai: 'https://api.openai.com/v1',
+    openrouter: 'https://openrouter.ai/api/v1',
+  });
+  const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+  const ANTHROPIC_VERSION = '2023-06-01';
+
+  function parseJSONResponse(raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (match) {
+        try {
+          return JSON.parse(match[1].trim());
+        } catch { /* fall through */ }
+      }
+      throw new Error(`AI response was not valid JSON:\n${raw}`);
+    }
+  }
+
+  async function sendOpenAICompatibleRequest(baseURL, apiKey, model, systemPrompt, userPrompt) {
+    const url = `${baseURL.replace(/\/$/, '')}/chat/completions`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`AI request failed (${response.status}): ${body || response.statusText}`);
+    }
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('AI response missing content in choices[0].message.content');
+    return parseJSONResponse(raw);
+  }
+
+  async function sendAnthropicRequest(apiKey, model, systemPrompt, userPrompt) {
+    const response = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Anthropic request failed (${response.status}): ${body || response.statusText}`);
+    }
+    const data = await response.json();
+    const raw = data?.content?.[0]?.text;
+    if (!raw) throw new Error('Anthropic response missing content[0].text');
+    return parseJSONResponse(raw);
+  }
+
+  async function sendAIRequest(config, systemPrompt, userPrompt) {
+    const { provider, apiKey, model, endpoint } = config || {};
+    if (!apiKey) throw new Error('AI API key is not configured. Set your API key in Settings > AI & API Keys.');
+    if (provider === 'anthropic') {
+      return sendAnthropicRequest(apiKey, model || 'claude-3-haiku-20240307', systemPrompt, userPrompt);
+    }
+    const baseURL = endpoint || DEFAULT_BASE_URLS[provider];
+    if (!baseURL) throw new Error(`Unknown AI provider "${provider}". Supported: openai, openrouter, anthropic, custom.`);
+    return sendOpenAICompatibleRequest(baseURL, apiKey, model || 'gpt-4o-mini', systemPrompt, userPrompt);
+  }
+
+  function supportsToolUse(config) {
+    const provider = config?.provider;
+    return provider === 'openai' || provider === 'openrouter' || provider === 'anthropic';
+  }
+
+  // By default, sendAIRequestWithTools falls through to sendAIRequest.
+  // Agentic tests override this via mockResolvedValue/mockRejectedValue.
+  const mockSendWithTools = jest.fn().mockImplementation(
+    (config, systemPrompt, userPrompt, tools, executeTool) => {
+      return sendAIRequest(config, systemPrompt, userPrompt);
+    },
+  );
+
+  return {
+    sendAIRequest,
+    sendAIRequestWithTools: mockSendWithTools,
+    supportsToolUse,
+  };
+});
 
 import { createInMemoryDb } from '../../utils/db.js';
 import { seedExercises } from '../../db/seed/seed.js';
 import { importRoutine } from '../routineImport.js';
+import { sendAIRequestWithTools } from '../aiClient.js';
 
 const ORIGINAL_FETCH = global.fetch;
 
@@ -498,6 +607,142 @@ describe('importRoutine', () => {
     expect(result.days[0].dayLabel).toBe('Upper Body');
     expect(result.days[0].exercises).toHaveLength(1);
     expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+  });
+});
+describe('importRoutine — agentic mode', () => {
+  beforeEach(() => {
+    sendAIRequestWithTools.mockReset();
+  });
+
+  it('uses exerciseId from agentic LLM response instead of post-hoc matching', async () => {
+    sendAIRequestWithTools.mockResolvedValue({
+      routineName: 'Agentic Push Day',
+      hasMultipleDays: false,
+      exercises: [
+        { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90, exerciseId: 1 },
+        { name: 'Squat', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 120, exerciseId: 2 },
+        { name: 'Push-Up', sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60, exerciseId: null },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'My push day routine');
+
+    expect(result.routineName).toBe('Agentic Push Day');
+    expect(result.days[0].exercises).toHaveLength(3);
+
+    // Bench Press — matched via exerciseId
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBe(1);
+
+    // Squat — matched via exerciseId
+    expect(result.days[0].exercises[1].name).toBe('Squat');
+    expect(result.days[0].exercises[1].matched).toBe(true);
+    expect(result.days[0].exercises[1].matchedExerciseId).toBe(2);
+
+    // Push-Up — unmatched (exerciseId: null)
+    expect(result.days[0].exercises[2].name).toBe('Push-Up');
+    expect(result.days[0].exercises[2].matched).toBe(false);
+    expect(result.days[0].exercises[2].matchedExerciseId).toBeNull();
+
+    // sendAIRequestWithTools should have been called
+    expect(sendAIRequestWithTools).toHaveBeenCalled();
+  });
+
+  it('handles multi-day import in agentic mode', async () => {
+    sendAIRequestWithTools.mockResolvedValue({
+      routineName: 'Agentic Push Pull',
+      hasMultipleDays: true,
+      days: [
+        {
+          dayLabel: 'Day 1 - Push',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90, exerciseId: 1 },
+            { name: 'Squat', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 120, exerciseId: 2 },
+          ],
+        },
+        {
+          dayLabel: 'Day 2 - Pull',
+          exercises: [
+            { name: 'Deadlift', sets: 3, repsMin: 5, repsMax: 8, restSeconds: 150, exerciseId: 3 },
+            { name: 'Pull-Up', sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90, exerciseId: 4 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Agentic push pull routine');
+
+    expect(result.routineName).toBe('Agentic Push Pull');
+    expect(result.hasMultipleDays).toBe(true);
+    expect(result.days).toHaveLength(2);
+
+    // Day 1
+    expect(result.days[0].dayLabel).toBe('Day 1 - Push');
+    expect(result.days[0].exercises).toHaveLength(2);
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBe(1);
+    expect(result.days[0].exercises[1].matched).toBe(true);
+    expect(result.days[0].exercises[1].matchedExerciseId).toBe(2);
+
+    // Day 2
+    expect(result.days[1].dayLabel).toBe('Day 2 - Pull');
+    expect(result.days[1].exercises).toHaveLength(2);
+    expect(result.days[1].exercises[0].matched).toBe(true);
+    expect(result.days[1].exercises[0].matchedExerciseId).toBe(3);
+    expect(result.days[1].exercises[1].matched).toBe(true);
+    expect(result.days[1].exercises[1].matchedExerciseId).toBe(4);
+  });
+
+  it('falls back to non-agentic mode when sendAIRequestWithTools throws', async () => {
+    sendAIRequestWithTools.mockRejectedValue(new Error('Tool call failed'));
+
+    // The fallback will call sendAIRequest which uses fetch — mock that
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: JSON.stringify({
+          routineName: 'Fallback Routine',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+          ],
+        }) } }],
+      }),
+      text: () => Promise.resolve(''),
+    });
+
+    const result = await importRoutine(db, mockAiConfig, 'Fallback routine');
+
+    // Should have fallen back to non-agentic mode with fuzzy matching
+    expect(result.routineName).toBe('Fallback Routine');
+    expect(result.days[0].exercises[0].name).toBe('Bench Press');
+    expect(result.days[0].exercises[0].matched).toBe(true);
+    expect(result.days[0].exercises[0].matchedExerciseId).toBeGreaterThan(0);
+  });
+
+  it('uses non-agentic mode for custom provider', async () => {
+    const customConfig = { provider: 'custom', apiKey: 'sk-test', model: 'gpt-4o-mini', endpoint: 'https://my-server.example/v1' };
+
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: JSON.stringify({
+          routineName: 'Custom Routine',
+          exercises: [
+            { name: 'Bench Press', sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+          ],
+        }) } }],
+      }),
+      text: () => Promise.resolve(''),
+    });
+
+    const result = await importRoutine(db, customConfig, 'Custom routine');
+
+    // Should use non-agentic mode (custom provider doesn't support tool-use)
+    expect(result.routineName).toBe('Custom Routine');
     expect(result.days[0].exercises[0].matched).toBe(true);
   });
 });
