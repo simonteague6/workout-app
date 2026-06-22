@@ -1,32 +1,64 @@
 // ExerciseSessionCard — one exercise block within the live session.
 //
-// Header: exercise name (tap → detail card) + a three-dots menu with the PRD
-// actions (substitute, superset, notes, reorder, remove). Body: the set rows
-// (each with its previous-session column) and an "Add set" button. Superset
-// members render with a colored left rail + badge so paired exercises stack
-// visually. The card owns the menu + notes sheet; mutations delegate to the
-// owning screen via callbacks.
+// Dark elevated surface with a thin colored left accent rail (green while the
+// exercise has pending sets, dim once every set is done). Header carries the
+// exercise name in heavy weight, a muted muscle/equipment tag, a pulsing green
+// dot while this exercise is resting, and an ellipsis menu. The menu + notes
+// editor are dark-themed bottom sheets with lucide icons per action. Mutations
+// delegate to the owning screen via callbacks.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 import SetRow from './SetRow.js';
-import { colors, radius, spacing } from '../theme.js';
+import Icon from './Icon.js';
+import { useAppTheme, spacing, radius, elevation } from '../theme/index.js';
+import { cardEnterSpring } from '../utils/animation.js';
 
 const MENU = [
-  { key: 'substitute', label: 'Substitute exercise' },
-  { key: 'superset', label: 'Superset with next' },
-  { key: 'notes', label: 'Edit notes' },
-  { key: 'moveUp', label: 'Move up' },
-  { key: 'moveDown', label: 'Move down' },
-  { key: 'remove', label: 'Remove exercise', danger: true },
+  { key: 'substitute', label: 'Substitute exercise', icon: 'replace' },
+  { key: 'superset', label: 'Superset with next', icon: 'layers' },
+  { key: 'notes', label: 'Edit notes', icon: 'sticky-note' },
+  { key: 'moveUp', label: 'Move up', icon: 'arrow-up' },
+  { key: 'moveDown', label: 'Move down', icon: 'arrow-down' },
+  { key: 'remove', label: 'Remove exercise', icon: 'trash', danger: true },
 ];
+
+/** Small pulsing green dot — shown on the card whose rest timer is active. */
+function RestDot({ color }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 520, easing: Easing.out(Easing.exp) }),
+        withTiming(0, { duration: 520, easing: Easing.in(Easing.exp) }),
+      ),
+      -1,
+      false,
+    );
+  }, [p]);
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.45 + p.value * 0.55,
+    transform: [{ scale: 0.8 + p.value * 0.45 }],
+  }));
+  return <Animated.View style={[styles.restDot, { backgroundColor: color }, style]} />;
+}
 
 /**
  * @param {object} props
  * @param {object} props.entry        workout_exercise entry from workoutStore
  * @param {number} props.index        0-based position in the session
  * @param {number} props.totalExercises
+ * @param {boolean} [props.isResting] true while this exercise's rest timer runs
  * @param {(exerciseId: number) => void} props.onOpenDetail
  * @param {(setId: number) => void} props.onCompleteSet
  * @param {(setId: number) => void} props.onCycleType
@@ -40,6 +72,7 @@ export default function ExerciseSessionCard({
   entry,
   index,
   totalExercises,
+  isResting,
   onOpenDetail,
   onCompleteSet,
   onCycleType,
@@ -49,13 +82,31 @@ export default function ExerciseSessionCard({
   onMenuAction,
   onSaveNotes,
 }) {
+  const { colors, elevation: elev } = useAppTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(entry.notes ?? '');
 
   const inSuperset = entry.supersetGroupId != null;
   const prev = entry.previousSets ?? [];
-  const hideWeight = entry.exercise.force === 'static' || entry.exercise.exercise_type === 'flexibility' || entry.exercise.exercise_type === 'cardio';
+  const hideWeight =
+    entry.exercise.force === 'static' ||
+    entry.exercise.exercise_type === 'flexibility' ||
+    entry.exercise.exercise_type === 'cardio';
+
+  const hasSets = entry.sets.length > 0;
+  const allDone = hasSets && entry.sets.every((s) => s.is_completed === 1);
+  const railColor = allDone ? colors.border : colors.accent;
+
+  // One-time mount entrance: fade + slight rise.
+  const enter = useSharedValue(0);
+  useEffect(() => {
+    enter.value = withSpring(1, cardEnterSpring);
+  }, [enter]);
+  const enterStyle = useAnimatedStyle(() => ({
+    opacity: enter.value,
+    transform: [{ translateY: (1 - enter.value) * 8 }],
+  }));
 
   const handleMenu = (key) => {
     setMenuOpen(false);
@@ -67,38 +118,58 @@ export default function ExerciseSessionCard({
     onMenuAction(key, entry.id);
   };
 
+  const visibleMenu = MENU.filter((m) => {
+    if (m.key === 'moveUp') return index > 0;
+    if (m.key === 'moveDown') return index < totalExercises - 1;
+    if (m.key === 'superset') return index < totalExercises - 1;
+    return true;
+  });
+
   return (
-    <View style={[styles.card, inSuperset && styles.cardSuperset]}>
-      {inSuperset ? <View style={styles.rail} /> : null}
+    <Animated.View
+      style={[
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border, ...elev.card },
+        enterStyle,
+      ]}
+    >
+      <View style={[styles.rail, { backgroundColor: railColor }]} />
+
       <View style={{ flex: 1 }}>
         <View style={styles.header}>
           <Pressable style={styles.titleWrap} onPress={() => onOpenDetail(entry.exercise.id)}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
               {entry.exercise.name}
             </Text>
-            <Text style={styles.subtitle} numberOfLines={1}>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]} numberOfLines={1}>
               {entry.exercise.primary_muscle ? entry.exercise.primary_muscle : ''}
-              {entry.exercise.equipment ? ` • ${entry.exercise.equipment}` : ''}
+              {entry.exercise.equipment ? `  ·  ${entry.exercise.equipment}` : ''}
             </Text>
           </Pressable>
-          {inSuperset ? <Text style={styles.badge}>SUPERSET</Text> : null}
-          <Pressable style={styles.dots} onPress={() => setMenuOpen(true)} hitSlop={10}>
-            <Text style={styles.dotsText}>⋮</Text>
+
+          {isResting ? <RestDot color={colors.accent} /> : null}
+          {inSuperset ? (
+            <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
+              <Icon name="layers" size={11} color={colors.accent} strokeWidth={2.5} />
+              <Text style={[styles.badgeText, { color: colors.accent }]}>SUPERSET</Text>
+            </View>
+          ) : null}
+          <Pressable style={styles.dots} onPress={() => setMenuOpen(true)} hitSlop={12}>
+            <Icon name="ellipsis" size={22} color={colors.textSecondary} />
           </Pressable>
         </View>
 
         {entry.notes ? (
-          <Text style={styles.notes} numberOfLines={2}>
+          <Text style={[styles.notes, { color: colors.textSecondary }]} numberOfLines={2}>
             {entry.notes}
           </Text>
         ) : null}
 
         <View style={styles.setColumnHeader}>
-          <Text style={[styles.colHead, { width: 22 }]}>#</Text>
-          <Text style={[styles.colHead, { width: 26 + spacing.sm, marginLeft: 0 }]}> </Text>
-          <Text style={[styles.colHead, { width: 70, marginRight: spacing.sm }]}>Previous</Text>
-          <Text style={[styles.colHead, { width: 60 }]}>Weight</Text>
-          <Text style={[styles.colHead, { width: 48, marginLeft: spacing.xs }]}>Reps</Text>
+          <Text style={[styles.colHead, { color: colors.textMuted, width: 30 + spacing.sm }]}>SET</Text>
+          <Text style={[styles.colHead, { color: colors.textMuted, width: 72, marginRight: spacing.sm }]}>PREVIOUS</Text>
+          <Text style={[styles.colHead, { color: colors.textMuted, width: 64 }]}>WEIGHT</Text>
+          <Text style={[styles.colHead, { color: colors.textMuted, width: 52, marginLeft: spacing.xs }]}>REPS</Text>
         </View>
         {entry.sets.map((set, i) => (
           <SetRow
@@ -115,31 +186,36 @@ export default function ExerciseSessionCard({
           />
         ))}
 
-        <Pressable style={styles.addSet} onPress={() => onAddSet(entry.id)} hitSlop={8}>
-          <Text style={styles.addSetText}>+ Add set</Text>
+        <Pressable
+          style={styles.addSet}
+          onPress={() => onAddSet(entry.id)}
+          hitSlop={8}
+          android_ripple={{ color: colors.accentSoft, radius: 20 }}
+        >
+          <Icon name="plus" size={16} color={colors.accent} strokeWidth={2.5} />
+          <Text style={[styles.addSetText, { color: colors.accent }]}>Add set</Text>
         </Pressable>
       </View>
 
-      {/* Three-dots action sheet. */}
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      {/* Action sheet. */}
+      <Modal visible={menuOpen} transparent animationType="slide" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setMenuOpen(false)} />
-        <View style={styles.sheet}>
-          <Text style={styles.sheetTitle} numberOfLines={1}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, ...elev.sheet }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>
             {entry.exercise.name}
           </Text>
-          {MENU.filter((m) => {
-            if (m.key === 'moveUp') return index > 0;
-            if (m.key === 'moveDown') return index < totalExercises - 1;
-            if (m.key === 'superset') return index < totalExercises - 1;
-            return true;
-          }).map((m) => (
+          {visibleMenu.map((m) => (
             <Pressable
               key={m.key}
               style={styles.sheetRow}
               onPress={() => handleMenu(m.key)}
-              android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
+              android_ripple={{ color: colors.surface }}
             >
-              <Text style={[styles.sheetRowText, m.danger && { color: colors.danger }]}>{m.label}</Text>
+              <Icon name={m.icon} size={18} color={m.danger ? colors.danger : colors.textSecondary} />
+              <Text style={[styles.sheetRowText, { color: m.danger ? colors.danger : colors.text }]}>
+                {m.label}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -148,10 +224,10 @@ export default function ExerciseSessionCard({
       {/* Notes editor sheet. */}
       <Modal visible={notesOpen} transparent animationType="fade" onRequestClose={() => setNotesOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setNotesOpen(false)} />
-        <View style={styles.notesSheet}>
-          <Text style={styles.sheetTitle}>Exercise notes</Text>
+        <View style={[styles.notesSheet, { backgroundColor: colors.card, borderColor: colors.border }, elev.modal]}>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Exercise notes</Text>
           <TextInput
-            style={styles.notesInput}
+            style={[styles.notesInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
             value={notesDraft}
             onChangeText={setNotesDraft}
             placeholder="Sticky note for this exercise…"
@@ -161,10 +237,10 @@ export default function ExerciseSessionCard({
           />
           <View style={styles.notesActions}>
             <Pressable onPress={() => setNotesOpen(false)} hitSlop={8}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={styles.saveBtn}
+              style={[styles.saveBtn, { backgroundColor: colors.accent }]}
               onPress={() => {
                 setNotesOpen(false);
                 onSaveNotes(entry.id, notesDraft);
@@ -175,19 +251,20 @@ export default function ExerciseSessionCard({
           </View>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  cardSuperset: { backgroundColor: colors.surface },
-  rail: { width: 4, backgroundColor: colors.primary },
+  rail: { width: 3 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -195,70 +272,98 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   titleWrap: { flex: 1, paddingVertical: 2 },
-  title: { fontSize: 16, fontWeight: '700', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
-  badge: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 0.5,
+  title: { fontSize: 17, fontWeight: '800' },
+  subtitle: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  restDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     marginRight: spacing.sm,
   },
-  dots: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  dotsText: { fontSize: 22, color: colors.textSecondary, fontWeight: '700' },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    marginRight: spacing.sm,
+    gap: 3,
+  },
+  badgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  dots: { paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
   notes: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xs,
     fontSize: 13,
-    color: colors.textSecondary,
     fontStyle: 'italic',
   },
   setColumnHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
+    paddingTop: spacing.sm,
     paddingBottom: 4,
   },
-  colHead: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
-  addSet: { paddingVertical: spacing.md, paddingLeft: spacing.md },
-  addSetText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  colHead: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
+  addSet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  addSetText: { fontSize: 15, fontWeight: '700' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: spacing.md,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: '800', marginBottom: spacing.sm },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingVertical: spacing.md,
   },
-  sheetTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  sheetRow: { paddingVertical: spacing.md },
-  sheetRowText: { fontSize: 16, color: colors.text },
+  sheetRowText: { fontSize: 16, fontWeight: '600' },
   notesSheet: {
     position: 'absolute',
     left: spacing.lg,
     right: spacing.lg,
-    top: '35%',
-    backgroundColor: colors.background,
+    top: '32%',
     borderRadius: radius.lg,
     padding: spacing.lg,
   },
   notesInput: {
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     padding: spacing.md,
     minHeight: 96,
     fontSize: 15,
-    color: colors.text,
     textAlignVertical: 'top',
   },
-  notesActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: spacing.md },
-  cancelText: { color: colors.textSecondary, fontSize: 15, marginRight: spacing.lg },
-  saveBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md },
-  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  notesActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    gap: spacing.lg,
+  },
+  cancelText: { fontSize: 15, fontWeight: '600' },
+  saveBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md },
+  saveBtnText: { color: '#06251A', fontSize: 15, fontWeight: '800' },
 });

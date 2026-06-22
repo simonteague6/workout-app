@@ -25,6 +25,7 @@ import {
 export const UNITS = Object.freeze({ LBS: 'lbs', KG: 'kg' });
 export const THEME = Object.freeze({ LIGHT: 'light', DARK: 'dark', SYSTEM: 'system' });
 export const SEARCH_BAR_POSITIONS = Object.freeze({ TOP: 'top', BOTTOM: 'bottom' });
+export const HAPTICS = Object.freeze({ FULL: 'full', MINIMAL: 'minimal', OFF: 'off' });
 export const AI_PROVIDERS = Object.freeze({
   OPENAI: 'openai',
   OPENROUTER: 'openrouter',
@@ -36,14 +37,14 @@ const VALID_UNITS = Object.values(UNITS);
 const VALID_THEMES = Object.values(THEME);
 const VALID_PROVIDERS = Object.values(AI_PROVIDERS);
 const VALID_SEARCH_BAR_POSITIONS = Object.values(SEARCH_BAR_POSITIONS);
+const VALID_HAPTICS = Object.values(HAPTICS);
 
 /**
  * @typedef {Object} SettingsStoreState
  * @property {'lbs'|'kg'} unit
  * @property {'light'|'dark'|'system'} theme
- * @property {number} defaultRestSeconds  app-wide default rest timer (fallback)
- * @property {number} defaultIncrement    app-wide default weight increment
  * @property {'top'|'bottom'} searchBarPosition
+ * @property {'full'|'minimal'|'off'} haptics  device feedback intensity
  * @property {{provider?: string|null, apiKey?: string|null, model?: string|null, endpoint?: string|null}} ai
  */
 
@@ -64,6 +65,7 @@ export const useSettingsStore = create((set, get) => ({
   defaultRestSeconds: 120,
   defaultIncrement: 2.5,
   searchBarPosition: 'top',
+  haptics: HAPTICS.FULL,
   ai: { provider: null, apiKey: null, model: null, endpoint: null },
 
   // -- actions --------------------------------------------------------------
@@ -114,6 +116,15 @@ export const useSettingsStore = create((set, get) => ({
     set({ searchBarPosition: position });
   },
 
+  setHaptics: (level) => {
+    if (!VALID_HAPTICS.includes(level)) {
+      throw new Error(`settingsStore.setHaptics: invalid level "${level}"`);
+    }
+    const db = dbOrNull();
+    if (db) setSetting(db, 'haptics', level);
+    set({ haptics: level });
+  },
+
   // Partial patch: { provider?, apiKey?, model?, endpoint? }. Persists
   // non-secret fields to app_settings and the API key to the keystore.
   setAiConfig: async (config) => {
@@ -149,6 +160,7 @@ export const useSettingsStore = create((set, get) => ({
     if (all.theme) next.theme = all.theme;
     if (all.unit) next.unit = all.unit;
     if (all.searchBarPosition) next.searchBarPosition = all.searchBarPosition;
+    if (all.haptics && VALID_HAPTICS.includes(all.haptics)) next.haptics = all.haptics;
     if (all.defaultRestSeconds != null) next.defaultRestSeconds = Number(all.defaultRestSeconds);
     if (all.defaultIncrement != null) next.defaultIncrement = Number(all.defaultIncrement);
     next.ai = {

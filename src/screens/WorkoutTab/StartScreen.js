@@ -1,10 +1,10 @@
 // StartScreen — Workout tab landing (issues #3 + #4).
 //
 // Offers a Free Flow start, a Continue button when an interrupted/active
-// session exists, and the Routines section: routines grouped by folder with
-// a pencil-icon edit affordance (PRD story 33) and a tap-to-preview path
-// (PRD story 31). "New routine" opens the routine builder. On mount it
-// rehydrates any unfinished session and loads folders + routines.
+// session exists, and the Routines section: routines grouped by folder with a
+// pencil-icon edit affordance (PRD story 33) and a tap-to-preview path (PRD
+// story 31). "New routine" opens the routine builder. On mount it rehydrates
+// any unfinished session and loads folders + routines.
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
@@ -12,10 +12,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useRoutineStore } from '../../stores/routineStore.js';
-import { colors, radius, spacing } from '../../theme.js';
-export default function StartScreen({ navigation }) {
+import { useAppTheme, spacing, radius, elevation } from '../../theme/index.js';
+import Icon from '../../components/Icon.js';
 
+export default function StartScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors, elevation: elev } = useAppTheme();
   const activeSession = useWorkoutStore((s) => s.activeSession);
   const startFreeFlow = useWorkoutStore((s) => s.startFreeFlow);
   const resumeInterrupted = useWorkoutStore((s) => s.resumeInterrupted);
@@ -48,64 +50,97 @@ export default function StartScreen({ navigation }) {
   const hasRoutines = routines.length > 0;
 
   return (
-    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Workout</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }, { paddingTop: insets.top }]}
+      contentContainerStyle={styles.content}
+    >
+      <Text style={[styles.title, { color: colors.text }]}>Workout</Text>
 
       {activeSession ? (
-        <Pressable style={styles.primaryBtn} onPress={handleContinue} android_ripple={{ color: 'rgba(255,255,255,0.25)' }}>
-          <Text style={styles.primaryBtnText}>Continue workout</Text>
-          <Text style={styles.primarySub}>
-            {activeSession.exercises.length} exercise{activeSession.exercises.length === 1 ? '' : 's'} in progress
-          </Text>
+        <Pressable
+          style={[styles.continueBtn, { backgroundColor: colors.accent }, elev.card]}
+          onPress={handleContinue}
+          android_ripple={{ color: 'rgba(0,0,0,0.15)' }}
+        >
+          <View style={styles.continueLeft}>
+            <Text style={styles.continueBtnText}>Continue workout</Text>
+            <Text style={styles.continueSub}>
+              {activeSession.exercises.length} exercise{activeSession.exercises.length === 1 ? '' : 's'} in progress
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={22} color="#06251A" strokeWidth={2.5} />
         </Pressable>
       ) : null}
 
       <Pressable
-        style={[styles.primaryBtn, activeSession && styles.secondaryBtn]}
+        style={[styles.freeFlow, activeSession ? { borderColor: colors.accent } : { backgroundColor: colors.card, ...elev.card }]}
         onPress={handleFreeFlow}
-        android_ripple={{ color: colors.primarySoft }}
+        android_ripple={{ color: colors.accentSoft }}
       >
-        <Text style={[styles.primaryBtnText, activeSession && styles.secondaryBtnText]}>Free Flow</Text>
-        <Text style={[styles.primarySub, activeSession && styles.secondarySubText]}>Start an empty workout</Text>
+        <View style={styles.freeFlowLeft}>
+          <Icon
+            name="zap"
+            size={20}
+            color={activeSession ? colors.accent : colors.accent}
+            strokeWidth={2.5}
+          />
+          <View>
+            <Text style={[styles.freeFlowText, { color: activeSession ? colors.accent : colors.text }]}>Free Flow</Text>
+            <Text style={[styles.freeFlowSub, { color: activeSession ? colors.textSecondary : colors.textMuted }]}>
+              Start an empty workout
+            </Text>
+          </View>
+        </View>
       </Pressable>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Routines</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Routines</Text>
         <Pressable
+          style={({ pressed }) => [styles.newBtn, pressed && { opacity: 0.6 }]}
           onPress={() => navigation.navigate('RoutineBuilder')}
           hitSlop={8}
-          android_ripple={{ color: colors.primarySoft, radius: 24, foreground: true }}
         >
-          <Text style={styles.newBtn}>＋ New</Text>
+          <Icon name="plus" size={16} color={colors.accent} strokeWidth={2.5} />
+          <Text style={[styles.newBtnText, { color: colors.accent }]}>New</Text>
         </Pressable>
       </View>
 
       {!hasRoutines ? (
-        <Text style={styles.empty}>No routines yet. Create one to pre-load exercises and target sets.</Text>
+        <View style={[styles.empty, { backgroundColor: colors.card, borderColor: colors.border }, elev.card]}>
+          <Icon name="list-plus" size={26} color={colors.textMuted} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            No routines yet. Create one to pre-load exercises and target sets.
+          </Text>
+        </View>
       ) : (
         grouped.map((group, gi) => (
           <View key={`${group.folderName}-${gi}`} style={styles.group}>
-            <Text style={styles.folderLabel}>{group.folderName}</Text>
+            <Text style={[styles.folderLabel, { color: colors.textMuted }]}>{group.folderName}</Text>
             {group.routines.map((r) => (
               <Pressable
                 key={r.id}
-                style={styles.routineRow}
+                style={({ pressed }) => [
+                  styles.routineRow,
+                  { backgroundColor: colors.card, borderColor: colors.border, ...elev.card },
+                  pressed && { opacity: 0.6 },
+                ]}
                 onPress={() => navigation.navigate('RoutinePreview', { routineId: r.id })}
-                android_ripple={{ color: colors.primarySoft }}
+                android_ripple={{ color: colors.accentSoft }}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.routineName} numberOfLines={1}>{r.name}</Text>
-                  <Text style={styles.routineSub}>
+                  <Text style={[styles.routineName, { color: colors.text }]} numberOfLines={1}>{r.name}</Text>
+                  <Text style={[styles.routineSub, { color: colors.textMuted }]}>
                     {r.exercise_count} exercise{r.exercise_count === 1 ? '' : 's'}
                   </Text>
                 </View>
                 <Pressable
-                  hitSlop={10}
+                  hitSlop={12}
                   onPress={() => navigation.navigate('RoutineBuilder', { routineId: r.id })}
-                  android_ripple={{ color: colors.primarySoft, radius: 20, foreground: true }}
+                  style={styles.editBtn}
                 >
-                  <Text style={styles.editIcon}>✎</Text>
+                  <Icon name="pencil" size={17} color={colors.textSecondary} strokeWidth={2} />
                 </Pressable>
+                <Icon name="chevron-right" size={18} color={colors.textMuted} />
               </Pressable>
             ))}
           </View>
@@ -116,21 +151,32 @@ export default function StartScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1 },
   content: { padding: spacing.xl, paddingBottom: spacing.xl * 2 },
-  title: { fontSize: 28, fontWeight: '700', color: colors.text, marginBottom: spacing.xl },
-  primaryBtn: {
-    backgroundColor: colors.primary,
+  title: { fontSize: 34, fontWeight: '800', marginBottom: spacing.xl },
+  continueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: spacing.lg,
     borderRadius: radius.lg,
-    alignItems: 'center',
     marginBottom: spacing.md,
   },
-  primaryBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  primarySub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 4 },
-  secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary },
-  secondaryBtnText: { color: colors.primary },
-  secondarySubText: { color: colors.textSecondary },
+  continueLeft: { flex: 1 },
+  continueBtnText: { color: '#06251A', fontSize: 18, fontWeight: '800' },
+  continueSub: { color: 'rgba(6,37,26,0.7)', fontSize: 13, fontWeight: '600', marginTop: 4 },
+  freeFlow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
+  freeFlowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  freeFlowText: { fontSize: 18, fontWeight: '800' },
+  freeFlowSub: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,16 +184,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  newBtn: { color: colors.primary, fontSize: 15, fontWeight: '700' },
-  empty: { color: colors.textMuted, fontSize: 14 },
+  sectionTitle: { fontSize: 20, fontWeight: '800' },
+  newBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
+  newBtnText: { fontSize: 15, fontWeight: '700' },
+  empty: {
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  emptyText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
   group: { marginBottom: spacing.lg },
   folderLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
+    marginLeft: 4,
   },
   routineRow: {
     flexDirection: 'row',
@@ -155,12 +210,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
   },
-  routineName: { fontSize: 16, fontWeight: '600', color: colors.text },
-  routineSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  editIcon: { fontSize: 18, color: colors.primary, paddingHorizontal: spacing.sm },
+  routineName: { fontSize: 16, fontWeight: '700' },
+  routineSub: { fontSize: 13, fontWeight: '600', marginTop: 2 },
+  editBtn: { paddingHorizontal: spacing.sm },
 });

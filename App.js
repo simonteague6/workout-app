@@ -7,7 +7,7 @@ import AppNavigator from './src/navigation/AppNavigator.js';
 import { initDatabase } from './src/utils/db.js';
 import { seedExercises } from './src/db/seed/seed.js';
 import { useSettingsStore } from './src/stores/settingsStore.js';
-import { useAppTheme } from './src/utils/theme.js';
+import { useAppTheme } from './src/theme/index.js';
 
 // Opens the database, runs pending migrations, and seeds the exercise library
 // on first launch. The live workout session and other stores read from the

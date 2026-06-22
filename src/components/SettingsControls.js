@@ -6,7 +6,7 @@
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useAppTheme } from '../utils/theme.js';
+import { useAppTheme } from '../theme/index.js';
 
 export function ScreenContainer({ children, pad = 16 }) {
   const insets = useSafeAreaInsets();

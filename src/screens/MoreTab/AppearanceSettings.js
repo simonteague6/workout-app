@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert } from 'react-native';
 
 import { ScreenContainer, Section, SegmentedControl, TextInputField, PrimaryButton } from '../../components/SettingsControls.js';
-import { useSettingsStore, UNITS, THEME, SEARCH_BAR_POSITIONS } from '../../stores/settingsStore.js';
+import { useSettingsStore, UNITS, THEME, SEARCH_BAR_POSITIONS, HAPTICS } from '../../stores/settingsStore.js';
 
 // Appearance — theme, units, and app-wide default values. Theme and unit
 // toggles write through immediately (and persist); the default rest timer and
@@ -12,11 +12,13 @@ export default function AppearanceSettings() {
   const {
     unit,
     theme,
+    haptics,
     defaultRestSeconds,
     defaultIncrement,
     searchBarPosition,
     setUnit,
     setTheme,
+    setHaptics,
     setSearchBarPosition,
     setDefaultRestSeconds,
     setDefaultIncrement,
@@ -51,6 +53,18 @@ export default function AppearanceSettings() {
             { label: 'Light', value: THEME.LIGHT },
             { label: 'Dark', value: THEME.DARK },
             { label: 'System', value: THEME.SYSTEM },
+          ]}
+        />
+      </Section>
+
+      <Section title="Haptics">
+        <SegmentedControl
+          value={haptics}
+          onValueChange={setHaptics}
+          options={[
+            { label: 'Full', value: HAPTICS.FULL },
+            { label: 'Minimal', value: HAPTICS.MINIMAL },
+            { label: 'Off', value: HAPTICS.OFF },
           ]}
         />
       </Section>

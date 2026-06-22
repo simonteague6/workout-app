@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text } from 'react-native';
+import { Animated, Easing, Text, View } from 'react-native';
 
 import StartScreen from '../screens/WorkoutTab/StartScreen.js';
 import LiveSession from '../screens/WorkoutTab/LiveSession.js';
@@ -22,7 +23,9 @@ import ImportRoutineScreen from '../screens/MoreTab/ImportRoutineScreen.js';
 import ImportReviewScreen from '../screens/MoreTab/ImportReviewScreen.js';
 import OnboardingScreen from '../screens/MoreTab/OnboardingScreen.js';
 import DataScreen from '../screens/MoreTab/DataScreen.js';
-import { useAppTheme } from '../utils/theme.js';
+import { useAppTheme } from '../theme/index.js';
+import { useWorkoutStore } from '../stores/workoutStore.js';
+import Icon from '../components/Icon.js';
 
 const BottomTab = createBottomTabNavigator();
 
@@ -133,15 +136,62 @@ function MoreStack() {
   );
 }
 
-// Lightweight text icons keep the scaffold dependency-free; real icons land
-// with the tab UI work. Labels follow PRD §Navigation Structure.
+// Tab icons: Workout uses a lucide dumbbell with a pulsing green dot when a
+// rest timer is running (visible from any tab). The other tabs keep their
+// lightweight letter glyphs until the tab-UI fan-out.
+function RestBadge() {
+  // Pulsing dot: scale + opacity loop so the timer is glanceable.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 650, easing: Easing.out(Easing.exp), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 650, easing: Easing.in(Easing.exp), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.25] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: -2,
+        right: -4,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#1CE882',
+        transform: [{ scale }],
+        opacity,
+      }}
+    />
+  );
+}
+
+function WorkoutTabIcon({ color, size, focused }) {
+  const endsAt = useWorkoutStore((s) => s.restTimerEndsAt);
+  return (
+    <View>
+      <Icon name="dumbbell" size={size} color={color} strokeWidth={focused ? 2.4 : 2} />
+      {endsAt != null ? <RestBadge /> : null}
+    </View>
+  );
+}
+
 function screenOptions({ route }) {
+  const isWorkout = route.name === 'WorkoutTab';
   return {
-    tabBarIcon: ({ color, size }) => (
-      <Text style={{ color, fontSize: size * 0.9, fontWeight: '600' }}>
-        {route.name[0]}
-      </Text>
-    ),
+    tabBarIcon: isWorkout
+      ? ({ color, size, focused }) => <WorkoutTabIcon color={color} size={size} focused={focused} />
+      : ({ color, size }) => (
+          <Text style={{ color, fontSize: size * 0.9, fontWeight: '600' }}>
+            {route.name[0]}
+          </Text>
+        ),
     headerShown: false,
   };
 }

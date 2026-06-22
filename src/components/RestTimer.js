@@ -1,16 +1,44 @@
-// RestTimer — the top-bar rest countdown that auto-starts when a set is checked.
+// RestTimer — compact circular rest countdown that floats at the top of the
+// live session.
 //
-// Reads restTimerEndsAt / restTimerTotalSeconds from workoutStore. Fades in when
-// a timer is running, counts down every second, and fades out when it reaches
-// zero (auto-stops via stopRestTimer). The +30s control calls addRestTime. Kept
-// dependency-free: Animated for the fade, setInterval for the tick.
+// Reads restTimerEndsAt / restTimerTotalSeconds from workoutStore. Fades in
+// when a timer is running, depletes a Skia progress ring (smoothly animated
+// via Reanimated), shows the remaining time in the center, and pulses/flashes
+// in the final 10 seconds. The +30s control calls addRestTime. Sticky — it
+// sits above the scrolling set list so it's always glanceable. A matching
+// pulsing dot lives on the resting ExerciseSessionCard and a badge on the
+// Workout tab (AppNavigator).
+//
+// Haptics: hapticsLight('restTimerEnd') fires when the timer reaches zero
+// (silenced when the user's haptics setting is 'off'; in 'minimal' the
+// rest-timer-end context is explicitly allowed through).
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useDerivedValue,
+  withTiming,
+  withSequence,
+  withRepeat,
+  Easing,
+  interpolateColor,
+  runOnJS,
+  cancelAnimation,
+} from 'react-native-reanimated';
+import { useAppTheme, spacing, radius } from '../theme/index.js';
+import { hapticsLight } from '../utils/haptics.js';
+import Icon from './Icon.js';
 import { useWorkoutStore } from '../stores/workoutStore.js';
-import { colors, radius, spacing } from '../theme.js';
+
+const SIZE = 76;
+const STROKE = 6;
+const R = (SIZE - STROKE) / 2;
+const CX = SIZE / 2;
+const CY = SIZE / 2;
 
 function formatSeconds(total) {
   const s = Math.max(0, Math.ceil(total));
@@ -18,94 +46,152 @@ function formatSeconds(total) {
   const r = s % 60;
   return `${m}:${String(r).padStart(2, '0')}`;
 }
-export default function RestTimer() {
 
+export default function RestTimer() {
   const insets = useSafeAreaInsets();
+  const { colors } = useAppTheme();
   const endsAt = useWorkoutStore((s) => s.restTimerEndsAt);
   const total = useWorkoutStore((s) => s.restTimerTotalSeconds);
   const addRestTime = useWorkoutStore((s) => s.addRestTime);
   const stopRestTimer = useWorkoutStore((s) => s.stopRestTimer);
 
   const [now, setNow] = useState(Date.now());
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = useSharedValue(0);
+  const progress = useSharedValue(0);
+  const flash = useSharedValue(0);
 
+  // Per-second tick: update the displayed time and smoothly deplete the ring.
   useEffect(() => {
     if (endsAt == null) {
-      Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+      opacity.value = withTiming(0, { duration: 180 });
+      cancelAnimation(flash);
+      flash.value = 0;
       return;
     }
-    Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    opacity.value = withTiming(1, { duration: 220 });
+    setNow(Date.now());
     const tick = setInterval(() => {
       const remaining = endsAt - Date.now();
       setNow(Date.now());
       if (remaining <= 0) {
         clearInterval(tick);
+        runOnJS(hapticsLight)('restTimerEnd');
         stopRestTimer();
       }
-    }, 1000);
+    }, 250);
     return () => clearInterval(tick);
-  }, [endsAt, opacity, stopRestTimer]);
+  }, [endsAt, opacity, flash, stopRestTimer]);
+
+  const remaining = endsAt == null ? 0 : Math.max(0, (endsAt - now) / 1000);
+  const pct = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
+  // Drive the ring smoothly toward the current pct each tick.
+  useEffect(() => {
+    progress.value = withTiming(pct, { duration: 280, easing: Easing.linear });
+  }, [pct, progress]);
+
+  const urgent = endsAt != null && remaining <= 10 && remaining > 0;
+  useEffect(() => {
+    if (urgent) {
+      flash.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 380, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0, { duration: 380, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(flash);
+      flash.value = 0;
+    }
+  }, [urgent, flash]);
+
+  // Skia arc path reactive to the progress shared value (60fps depletion).
+  const progressPath = useDerivedValue(() => {
+    const p = Skia.Path.Make();
+    const rect = Skia.XYWHRect(CX - R, CY - R, R * 2, R * 2);
+    p.addArc(rect, -90, 360 * progress.value);
+    return p;
+  });
+
+  const wrapStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const timeStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(flash.value, [0, 1], [colors.text, colors.danger]),
+  }));
+  const cardPulse = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + flash.value * 0.06 }],
+  }));
 
   if (endsAt == null) return null;
 
-  const remaining = Math.max(0, (endsAt - now) / 1000);
-  const pct = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
   return (
+    <Animated.View
+      style={[styles.wrap, wrapStyle, { paddingTop: insets.top + 8 }]}
+      pointerEvents="box-none"
+    >
+      <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, cardPulse]}>
+        <View style={styles.ringWrap}>
+          <Canvas style={{ width: SIZE, height: SIZE }}>
+            <Circle cx={CX} cy={CY} r={R} style="stroke" strokeWidth={STROKE} color={colors.border} />
+            <Path path={progressPath} style="stroke" strokeWidth={STROKE} strokeCap="round" color={colors.accent} />
+          </Canvas>
+          <Animated.Text style={[styles.time, timeStyle]} allowFontScaling={false}>
+            {formatSeconds(remaining)}
+          </Animated.Text>
+        </View>
 
-    <Animated.View style={[styles.bar, { opacity, paddingTop: insets.top, height: 56 + insets.top }]} pointerEvents="box-none">
-      <View style={styles.fill} />
-      <View style={[styles.progress, { width: `${pct * 100}%` }]} />
-      <View style={styles.content}>
-        <Text style={styles.label}>Rest</Text>
-        <Text style={styles.count}>{formatSeconds(remaining)}</Text>
-        <Pressable
-          style={styles.add30}
-          android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: 20 }}
-          onPress={() => addRestTime(30)}
-          hitSlop={10}
-        >
-          <Text style={styles.add30Text}>+30s</Text>
-        </Pressable>
-      </View>
+        <View style={styles.side}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>REST</Text>
+          <Pressable
+            style={[styles.add30, { borderColor: colors.accent }]}
+            onPress={() => addRestTime(30)}
+            hitSlop={10}
+            android_ripple={{ color: colors.accentSoft, radius: 18 }}
+          >
+            <Icon name="plus" size={14} color={colors.accent} strokeWidth={3} />
+            <Text style={[styles.add30Text, { color: colors.accent }]}>30s</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }
 
+
 const styles = StyleSheet.create({
-  bar: {
+  wrap: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 56,
-    backgroundColor: colors.primary,
-    overflow: 'hidden',
-    zIndex: 10,
+    alignItems: 'center',
+    zIndex: 20,
   },
-  fill: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.primary },
-  progress: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    backgroundColor: colors.primarySoft,
-    opacity: 0.35,
-  },
-  content: {
-    flex: 1,
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  label: { color: '#fff', fontSize: 13, fontWeight: '600', opacity: 0.9 },
-  count: { color: '#fff', fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  add30: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
   },
-  add30Text: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  ringWrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
+  time: {
+    position: 'absolute',
+    fontSize: 18,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  side: { marginLeft: spacing.sm, alignItems: 'flex-start' },
+  label: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 6 },
+  add30: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    gap: 3,
+  },
+  add30Text: { fontSize: 12, fontWeight: '700' },
 });

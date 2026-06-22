@@ -1,10 +1,15 @@
 // LiveSession — the core workout logging screen (issue #3).
 //
-// Renders the active WorkoutSession tree from workoutStore: the rest-timer top
-// bar, one ExerciseSessionCard per exercise (with set rows, the previous column,
-// and the three-dots menu), an add-exercise modal (pair-frequency suggestions),
-// and the finish flow. All mutations delegate to the store; navigation (open
-// exercise detail, finish screen) is passed up to the Workout stack.
+// Renders the active WorkoutSession tree from workoutStore: the floating rest
+// timer at top, one ExerciseSessionCard per exercise (with set rows, the
+// previous column, and the ellipsis menu), an add-exercise modal, and the
+// finish flow. All mutations delegate to the store; navigation (open exercise
+// detail, finish screen) is passed up to the Workout stack.
+//
+// The card whose rest timer is running gets `isResting` so it shows a pulsing
+// dot. We track the most-recently-completed exercise locally (the store keeps
+// a single global rest timer, not per-exercise) and clear it when the timer
+// stops.
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
@@ -14,13 +19,16 @@ import AddExerciseModal from '../../components/AddExerciseModal.js';
 import ExerciseSessionCard from '../../components/ExerciseSessionCard.js';
 import SupersetInterlacedCard from '../../components/SupersetInterlacedCard.js';
 import RestTimer from '../../components/RestTimer.js';
+import Icon from '../../components/Icon.js';
 import { useWorkoutStore } from '../../stores/workoutStore.js';
 import { useExerciseStore } from '../../stores/exerciseStore.js';
-import { colors, radius, spacing } from '../../theme.js';
-export default function LiveSession({ navigation }) {
+import { useAppTheme, spacing, radius } from '../../theme/index.js';
 
+export default function LiveSession({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useAppTheme();
   const activeSession = useWorkoutStore((s) => s.activeSession);
+  const restEndsAt = useWorkoutStore((s) => s.restTimerEndsAt);
   const addExercise = useWorkoutStore((s) => s.addExercise);
   const addSet = useWorkoutStore((s) => s.addSet);
   const toggleCompleteSet = useWorkoutStore((s) => s.toggleCompleteSet);
@@ -35,15 +43,19 @@ export default function LiveSession({ navigation }) {
   const finishWorkout = useWorkoutStore((s) => s.finishWorkout);
   const createCustomExercise = useExerciseStore((s) => s.createCustomExercise);
 
-  // Add-exercise modal can run in two modes: 'add' or 'substitute'.
   const [modalOpen, setModalOpen] = useState(false);
-  const [mode, setMode] = useState('add'); // 'add' | { type: 'substitute', workoutExerciseId }
+  const [mode, setMode] = useState('add');
   const [finishing, setFinishing] = useState(false);
+  const [restingId, setRestingId] = useState(null);
 
-  // Keep the header title in sync with the active session.
   useEffect(() => {
     navigation.setOptions({ title: activeSession?.routine_id ? 'Routine' : 'Free Flow' });
   }, [navigation, activeSession?.routine_id]);
+
+  // Clear the per-card resting highlight once the global timer stops.
+  useEffect(() => {
+    if (restEndsAt == null) setRestingId(null);
+  }, [restEndsAt]);
 
   const openAddModal = () => {
     setMode('add');
@@ -70,7 +82,6 @@ export default function LiveSession({ navigation }) {
       if (mode === 'add') await addExercise(created.id);
       else await substituteExercise(mode.workoutExerciseId, created.id);
     } catch {
-      // Duplicate name etc. — fall back to the full editor.
       setModalOpen(false);
       navigation.navigate('ExerciseEditor');
       return;
@@ -100,6 +111,14 @@ export default function LiveSession({ navigation }) {
     }
   };
 
+  // Record which exercise a completion happened in so its card can show the
+  // rest pulse while the global timer runs.
+  const handleCompleteSet = (setId) => {
+    const owner = activeSession.exercises.find((e) => e.sets.some((s) => s.id === setId));
+    if (owner) setRestingId(owner.id);
+    toggleCompleteSet(setId);
+  };
+
   const handleFinish = async () => {
     setFinishing(true);
     try {
@@ -112,37 +131,44 @@ export default function LiveSession({ navigation }) {
 
   if (!activeSession) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>No active workout.</Text>
-        <Pressable style={styles.startBtn} onPress={() => navigation.navigate('Start')}>
+      <View style={[styles.empty, { backgroundColor: colors.background }]}>
+        <Icon name="dumbbell" size={40} color={colors.textMuted} />
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No active workout.</Text>
+        <Pressable
+          style={[styles.startBtn, { backgroundColor: colors.accent }]}
+          onPress={() => navigation.navigate('Start')}
+        >
           <Text style={styles.startBtnText}>Start a workout</Text>
         </Pressable>
       </View>
     );
   }
 
+  const timerClearance = insets.top + 104;
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <RestTimer />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={56}
+        keyboardVerticalOffset={timerClearance}
       >
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: 56 + insets.top }]} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ paddingTop: timerClearance, paddingBottom: 96 }} keyboardShouldPersistTaps="handled">
           {activeSession.exercises.length === 0 ? (
             <View style={styles.firstHint}>
-              <Text style={styles.firstHintText}>Add your first exercise to start logging.</Text>
+              <Icon name="dumbbell" size={36} color={colors.textMuted} />
+              <Text style={[styles.firstHintText, { color: colors.textMuted }]}>
+                Add your first exercise to start logging.
+              </Text>
             </View>
           ) : null}
           {(() => {
-            // Group exercises by supersetGroupId for interlaced rendering.
             const groups = [];
             const standalone = [];
             for (let i = 0; i < activeSession.exercises.length; i++) {
               const entry = activeSession.exercises[i];
               if (entry.supersetGroupId != null) {
-                // Find or create a group for this supersetGroupId.
                 let group = groups.find((g) => g.groupId === entry.supersetGroupId);
                 if (!group) {
                   group = { groupId: entry.supersetGroupId, entries: [], startIndex: i };
@@ -153,7 +179,6 @@ export default function LiveSession({ navigation }) {
                 standalone.push({ entry, index: i });
               }
             }
-            // Render standalone exercises as individual cards.
             const elements = [];
             for (const { entry, index } of standalone) {
               elements.push(
@@ -162,8 +187,9 @@ export default function LiveSession({ navigation }) {
                   entry={entry}
                   index={index}
                   totalExercises={activeSession.exercises.length}
+                  isResting={restEndsAt != null && restingId === entry.id}
                   onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
-                  onCompleteSet={(setId) => toggleCompleteSet(setId)}
+                  onCompleteSet={handleCompleteSet}
                   onCycleType={(setId) => cycleSetType(setId)}
                   onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
                   onAddSet={(weId) => addSet(weId)}
@@ -173,7 +199,6 @@ export default function LiveSession({ navigation }) {
                 />,
               );
             }
-            // Render superset groups as interlaced cards.
             for (const group of groups) {
               elements.push(
                 <SupersetInterlacedCard
@@ -181,7 +206,7 @@ export default function LiveSession({ navigation }) {
                   groupedExercises={group.entries}
                   totalExercises={activeSession.exercises.length}
                   onOpenDetail={(exerciseId) => navigation.navigate('ExerciseDetail', { exerciseId })}
-                  onCompleteSet={(setId) => toggleCompleteSet(setId)}
+                  onCompleteSet={handleCompleteSet}
                   onCycleType={(setId) => cycleSetType(setId)}
                   onUpdateSetFields={(setId, patch) => updateSetFields(setId, patch)}
                   onAddSet={(weId) => addSet(weId)}
@@ -196,16 +221,22 @@ export default function LiveSession({ navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={styles.footer}>
-        <Pressable style={styles.addBtn} onPress={openAddModal} android_ripple={{ color: colors.primarySoft }}>
-          <Text style={styles.addBtnText}>+ Add exercise</Text>
+      <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <Pressable
+          style={[styles.addBtn, { borderColor: colors.accent }]}
+          onPress={openAddModal}
+          android_ripple={{ color: colors.accentSoft }}
+        >
+          <Icon name="plus" size={18} color={colors.accent} strokeWidth={2.5} />
+          <Text style={[styles.addBtnText, { color: colors.accent }]}>Add exercise</Text>
         </Pressable>
         <Pressable
           style={[styles.finishBtn, finishing && { opacity: 0.6 }]}
           onPress={handleFinish}
           disabled={finishing}
-          android_ripple={{ color: 'rgba(255,255,255,0.25)' }}
+          android_ripple={{ color: 'rgba(0,0,0,0.2)' }}
         >
+          <Icon name="flag" size={18} color="#06251A" strokeWidth={2.5} />
           <Text style={styles.finishBtnText}>Finish</Text>
         </Pressable>
       </View>
@@ -221,14 +252,13 @@ export default function LiveSession({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  scroll: { paddingBottom: 96, paddingTop: 56 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  emptyText: { color: colors.textSecondary, fontSize: 16, marginBottom: spacing.lg },
-  startBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md },
-  startBtnText: { color: '#fff', fontWeight: '600' },
-  firstHint: { padding: spacing.xl, alignItems: 'center' },
-  firstHintText: { color: colors.textMuted, fontSize: 15 },
+  container: { flex: 1 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  startBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md },
+  startBtnText: { color: '#06251A', fontWeight: '800', fontSize: 15 },
+  firstHint: { padding: spacing.xl, alignItems: 'center', gap: spacing.md },
+  firstHintText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
   footer: {
     position: 'absolute',
     left: 0,
@@ -237,12 +267,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: spacing.md,
     paddingBottom: spacing.lg,
-    backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    gap: spacing.sm,
   },
-  addBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderWidth: 1, borderColor: colors.primary, borderRadius: radius.md, marginRight: spacing.sm },
-  addBtnText: { color: colors.primary, fontWeight: '600', fontSize: 15 },
-  finishBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl, backgroundColor: colors.primary, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  finishBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  addBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  addBtnText: { fontWeight: '700', fontSize: 15 },
+  finishBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: '#1CE882',
+    borderRadius: radius.md,
+  },
+  finishBtnText: { color: '#06251A', fontWeight: '800', fontSize: 15 },
 });
