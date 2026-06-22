@@ -98,18 +98,18 @@ Test through public interfaces only — Zustand store actions and SQLite query f
 
 ## Important Files
 
-| File | Purpose |
-|------|---------|
-| `CONTEXT.md` | Domain glossary — canonical terms, avoid-list |
-| `docs/prd-workout-app-mvp.md` | Full PRD: 62 user stories, data model, implementation decisions |
-| `docs/agents/domain.md` | How agents consume domain docs |
-| `docs/agents/issue-tracker.md` | GitHub CLI conventions for issue operations |
-| `docs/agents/triage-labels.md` | Label mapping (`ready-for-agent`, `needs-triage`, etc.) |
-| `src/db/schema.sql` | Authoritative full schema (13 tables, FK constraints, indexes) |
-| `src/db/seed/seed.js` | Transforms wrkout `exercises.json` → SQLite INSERTs (idempotent) |
-| `src/db/seed/exercises.json` | Bundled wrkout exercise dataset (public domain, Unlicense) |
-| `src/utils/db.js` | DB adapter (op-sqlite on device / node:sqlite in tests) + migration runner |
-| `skills-lock.json` | Installed Matt Pocock skills manifest |
+|File|Purpose|
+|---|---|
+|`CONTEXT.md`|Domain glossary — canonical terms, avoid-list|
+|`docs/prd-workout-app-mvp.md`|Full PRD: 62 user stories, data model, implementation decisions|
+|`docs/agents/domain.md`|How agents consume domain docs|
+|`docs/agents/issue-tracker.md`|GitHub CLI conventions for issue operations|
+|`docs/agents/triage-labels.md`|Label mapping (`ready-for-agent`, `needs-triage`, etc.)|
+|`src/db/schema.sql`|Authoritative full schema (13 tables, FK constraints, indexes)|
+|`src/db/seed/seed.js`|Transforms wrkout `exercises.json` → SQLite INSERTs (idempotent)|
+|`src/db/seed/exercises.json`|Bundled wrkout exercise dataset (public domain, Unlicense)|
+|`src/utils/db.js`|DB adapter (op-sqlite on device / node:sqlite in tests) + migration runner|
+|`skills-lock.json`|Installed Matt Pocock skills manifest|
 
 ## Runtime/Tooling Preferences
 
@@ -134,20 +134,20 @@ Located in `src/utils/db.js`:
 - `resetSecureStorageForTesting()` — clears in-memory secure storage map
 
 ### Test files
-| File | What it covers |
-|------|---------------|
-| `src/stores/__tests__/workoutStore.test.js` | Free flow, add/complete sets, set type cycle, exercise CRUD, supersets, resume, finish, start-from-routine, substitute |
-| `src/stores/__tests__/settingsStore.test.js` | Settings persistence, AI config, load on restart |
-| `src/stores/__tests__/exerciseStore.test.js` | Library load/search, filtering, sort by frequency, create/edit/archive, photos, history |
-| `src/stores/__tests__/routineStore.test.js` | Folder/routine CRUD, edit + reorder, preview, save-as-new from finish diff |
-| `src/db/__tests__/routineQueries.test.js` | Folder/routine CRUD, routine preview, routine-vs-session diff, save-as-new + update-template-from-session |
-| `src/db/__tests__/sessionQueries.test.js` | Session CRUD, exercise suggestions via pair frequency, set pre-fill, supersets, volume calc |
-| `src/db/__tests__/exerciseQueries.test.js` | Exercise lookup/search/sort, custom exercises, archive/unarchive, photo paths, history |
-| `src/db/__tests__/settingsQueries.test.js` | Read/write app_settings table |
-| `src/db/__tests__/portabilityQueries.test.js` | Export/import workout data |
-| `src/db/__tests__/migrationRunner.test.js` | Apply schemas in order, idempotency |
-| `src/db/__tests__/seed.test.js` | wrkout dataset seeding, field mappings, idempotency |
-| `src/utils/__tests__/formatters.test.js` | Weight conversion, rounding, display formatting |
+|File|What it covers|
+|---|---|
+|`src/stores/__tests__/workoutStore.test.js`|Free flow, add/complete sets, set type cycle, exercise CRUD, supersets, resume, finish, start-from-routine, substitute|
+|`src/stores/__tests__/settingsStore.test.js`|Settings persistence, AI config, load on restart|
+|`src/stores/__tests__/exerciseStore.test.js`|Library load/search, filtering, sort by frequency, create/edit/archive, photos, history|
+|`src/stores/__tests__/routineStore.test.js`|Folder/routine CRUD, edit + reorder, preview, save-as-new from finish diff|
+|`src/db/__tests__/routineQueries.test.js`|Folder/routine CRUD, routine preview, routine-vs-session diff, save-as-new + update-template-from-session|
+|`src/db/__tests__/sessionQueries.test.js`|Session CRUD, exercise suggestions via pair frequency, set pre-fill, supersets, volume calc|
+|`src/db/__tests__/exerciseQueries.test.js`|Exercise lookup/search/sort, custom exercises, archive/unarchive, photo paths, history|
+|`src/db/__tests__/settingsQueries.test.js`|Read/write app_settings table|
+|`src/db/__tests__/portabilityQueries.test.js`|Export/import workout data|
+|`src/db/__tests__/migrationRunner.test.js`|Apply schemas in order, idempotency|
+|`src/db/__tests__/seed.test.js`|wrkout dataset seeding, field mappings, idempotency|
+|`src/utils/__tests__/formatters.test.js`|Weight conversion, rounding, display formatting|
 
 ### Coverage gaps
 - `src/utils/db.js` — statement splitting, adapter logic not unit-tested (indirectly exercised via store/query tests)
