@@ -155,7 +155,7 @@ Located in `src/utils/db.js`:
 - `src/ai/` — no tests yet (module not implemented)
 
 ### TDD workflow
-Issues #3, #4, #5, #6 require TDD. Agents read `skill://tdd` before starting. Red-green-refactor per acceptance criterion. Never write all tests upfront.
+Agents read `skill://tdd` before starting. Red-green-refactor per acceptance criterion. Never write all tests upfront.
 
 ### What to test
 - **Store actions**: given inputs → correct state + correct SQLite rows
