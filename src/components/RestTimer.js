@@ -32,7 +32,7 @@ import Animated, {
 import { useAppTheme, spacing, radius } from '../theme/index.js';
 import { hapticsLight } from '../utils/haptics.js';
 import Icon from './Icon.js';
-import { useWorkoutStore } from '../stores/workoutStore.js';
+import { useWorkoutOperationsStore } from '../stores/workoutStore.js';
 
 const SIZE = 76;
 const STROKE = 6;
@@ -50,10 +50,10 @@ function formatSeconds(total) {
 export default function RestTimer() {
   const insets = useSafeAreaInsets();
   const { colors } = useAppTheme();
-  const endsAt = useWorkoutStore((s) => s.restTimerEndsAt);
-  const total = useWorkoutStore((s) => s.restTimerTotalSeconds);
-  const addRestTime = useWorkoutStore((s) => s.addRestTime);
-  const stopRestTimer = useWorkoutStore((s) => s.stopRestTimer);
+  const endsAt = useWorkoutOperationsStore((s) => s.restTimerEndsAt);
+  const total = useWorkoutOperationsStore((s) => s.restTimerTotalSeconds);
+  const addRestTime = useWorkoutOperationsStore((s) => s.addRestTime);
+  const stopRestTimer = useWorkoutOperationsStore((s) => s.stopRestTimer);
 
   const [now, setNow] = useState(Date.now());
   const opacity = useSharedValue(0);
@@ -108,9 +108,8 @@ export default function RestTimer() {
 
   // Skia arc path reactive to the progress shared value (60fps depletion).
   const progressPath = useDerivedValue(() => {
-    const p = Skia.Path.Make();
     const rect = Skia.XYWHRect(CX - R, CY - R, R * 2, R * 2);
-    p.addArc(rect, -90, 360 * progress.value);
+    const p = Skia.PathBuilder.Make().addArc(rect, -90, 360 * progress.value).detach();
     return p;
   });
 

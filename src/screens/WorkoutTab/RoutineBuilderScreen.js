@@ -27,7 +27,7 @@ import {
 import AddExerciseModal from '../../components/AddExerciseModal.js';
 import OptionPickerModal from '../../components/OptionPickerModal.js';
 import { useRoutineStore } from '../../stores/routineStore.js';
-import { useWorkoutStore } from '../../stores/workoutStore.js';
+import { useWorkoutOperationsStore } from '../../stores/workoutStore.js';
 import { getDatabase } from '../../utils/db.js';
 import { getRoutineDetail } from '../../db/queries/routineQueries.js';
 import { colors, radius, spacing } from '../../theme.js';
@@ -53,7 +53,7 @@ export default function RoutineBuilderScreen({ navigation, route }) {
   const createFolder = useRoutineStore((s) => s.createFolder);
   const createRoutine = useRoutineStore((s) => s.createRoutine);
   const editRoutine = useRoutineStore((s) => s.editRoutine);
-  const suggestExercises = useWorkoutStore((s) => s.suggestExercises);
+  const suggestExercises = useWorkoutOperationsStore((s) => s.suggestExercises);
   // Seed the form synchronously from SQLite on mount (edit mode) so there's no
   // setState-in-effect. The detail is read once; the form is then local state.
   const initialDetail = useMemo(

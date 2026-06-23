@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { useWorkoutStore } from '../stores/workoutStore.js';
+import { useWorkoutOperationsStore } from '../stores/workoutStore.js';
 import { colors, radius, spacing } from '../theme.js';
 
 /**
@@ -19,7 +19,7 @@ import { colors, radius, spacing } from '../theme.js';
  * @param {() => void} props.onClose
  */
 export default function AddExerciseModal({ visible, onSelect, onCreateNew, onClose }) {
-  const suggestExercises = useWorkoutStore((s) => s.suggestExercises);
+  const suggestExercises = useWorkoutOperationsStore((s) => s.suggestExercises);
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
 

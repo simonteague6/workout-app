@@ -1,40 +1,38 @@
 // Progress tab — 1RM charts, volume trends, heatmap, muscle-group frequency, PRs.
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { getDatabase } from '../../utils/db.js';
-import {
-  getAllTime1RMs,
-  getRecent1RMs,
-  getWeeklyVolumeByMuscleGroup,
-  getHeatmapData,
-  getMuscleGroupFrequency,
-} from '../../db/queries/analyticsQueries.js';
+import { useAnalyticsStore } from '../../stores/analyticsStore.js';
 import CalendarHeatmap from '../../components/CalendarHeatmap.js';
 import { colors, radius, spacing } from '../../theme.js';
 
 const BAR_MAX_WIDTH = 200;
 const BAR_HEIGHT = 16;
 const BAR_GAP = 4;
-export default function ProgressScreen() {
 
+export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
-  const [allTimePRs, setAllTimePRs] = useState([]);
-  const [recentPRs, setRecentPRs] = useState([]);
-  const [volumeData, setVolumeData] = useState([]);
-  const [heatmapData, setHeatmapData] = useState([]);
-  const [muscleFreq, setMuscleFreq] = useState([]);
+  const allTimePRs = useAnalyticsStore((s) => s.allTimePRs);
+  const recentPRs = useAnalyticsStore((s) => s.recentPRs);
+  const volumeData = useAnalyticsStore((s) => s.volumeData);
+  const heatmapData = useAnalyticsStore((s) => s.heatmapData);
+  const muscleFreq = useAnalyticsStore((s) => s.muscleFreq);
+  const isLoading = useAnalyticsStore((s) => s.isLoading);
+  const loadProgressData = useAnalyticsStore((s) => s.loadProgressData);
 
   useEffect(() => {
-    const db = getDatabase();
-    setAllTimePRs(getAllTime1RMs(db));
-    setRecentPRs(getRecent1RMs(db));
-    setVolumeData(getWeeklyVolumeByMuscleGroup(db));
-    setHeatmapData(getHeatmapData(db));
-    setMuscleFreq(getMuscleGroupFrequency(db));
-  }, []);
+    loadProgressData();
+  }, [loadProgressData]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.emptyText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
@@ -106,43 +104,43 @@ function Section({ title, children }) {
 }
 
 function renderVolumeChart(data) {
-  // Group by muscle group, show last 12 weeks
-  const muscleGroups = [...new Set(data.map((d) => d.muscleGroup))];
-  const maxVolume = Math.max(...data.map((d) => d.totalVolume), 1);
-
-  return muscleGroups.map((mg) => {
-    const weeks = data.filter((d) => d.muscleGroup === mg);
-    const total = weeks.reduce((sum, w) => sum + w.totalVolume, 0);
-    const barWidth = Math.max(4, (total / maxVolume) * BAR_MAX_WIDTH);
-
-    return (
-      <View key={mg} style={styles.volumeRow}>
-        <Text style={styles.volumeLabel}>{mg}</Text>
-        <View style={styles.barTrack}>
-          <View style={[styles.bar, { width: barWidth }]} />
-        </View>
-        <Text style={styles.volumeValue}>{total.toLocaleString()} kg</Text>
+  const maxVolume = Math.max(...data.map((d) => d.total_volume), 1);
+  return data.map((week, i) => (
+    <View key={`vol-${week.week_start}-${i}`} style={styles.barRow}>
+      <Text style={styles.barLabel} numberOfLines={1}>
+        {week.muscle_group}
+      </Text>
+      <View style={styles.barTrack}>
+        <View
+          style={[
+            styles.barFill,
+            { width: Math.max((week.total_volume / maxVolume) * BAR_MAX_WIDTH, 2) },
+          ]}
+        />
       </View>
-    );
-  });
+      <Text style={styles.barValue}>{Math.round(week.total_volume)} kg</Text>
+    </View>
+  ));
 }
 
 function renderMuscleFreqChart(data) {
-  const maxCount = Math.max(...data.map((d) => d.sessionCount), 1);
-
-  return data.slice(0, 8).map((f) => {
-    const barWidth = Math.max(4, (f.sessionCount / maxCount) * BAR_MAX_WIDTH);
-
-    return (
-      <View key={f.muscleGroup} style={styles.volumeRow}>
-        <Text style={styles.volumeLabel}>{f.muscleGroup}</Text>
-        <View style={styles.barTrack}>
-          <View style={[styles.freqBar, { width: barWidth }]} />
-        </View>
-        <Text style={styles.volumeValue}>{f.sessionCount} sessions</Text>
+  const maxCount = Math.max(...data.map((d) => d.session_count), 1);
+  return data.map((item, i) => (
+    <View key={`freq-${item.muscle_group}-${i}`} style={styles.barRow}>
+      <Text style={styles.barLabel} numberOfLines={1}>
+        {item.muscle_group}
+      </Text>
+      <View style={styles.barTrack}>
+        <View
+          style={[
+            styles.barFill,
+            { width: Math.max((item.session_count / maxCount) * BAR_MAX_WIDTH, 2) },
+          ]}
+        />
       </View>
-    );
-  });
+      <Text style={styles.barValue}>{item.session_count} sessions</Text>
+    </View>
+  ));
 }
 
 const styles = StyleSheet.create({
@@ -151,84 +149,82 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xl * 2,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   header: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.lg,
   },
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    fontSize: 14,
+    fontWeight: '600',
     color: colors.textSecondary,
-    fontStyle: 'italic',
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   prRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.xs,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   prName: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text,
     flex: 1,
   },
   prValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.primary,
   },
   prValueRecent: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.success,
   },
-  volumeRow: {
+  barRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: BAR_GAP,
+    marginBottom: BAR_GAP,
   },
-  volumeLabel: {
-    width: 80,
+  barLabel: {
+    width: 100,
     fontSize: 12,
-    color: colors.text,
+    color: colors.textSecondary,
+    marginRight: spacing.sm,
   },
   barTrack: {
     flex: 1,
     height: BAR_HEIGHT,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.border,
     borderRadius: radius.sm,
     overflow: 'hidden',
   },
-  bar: {
-    height: '100%',
+  barFill: {
+    height: BAR_HEIGHT,
     backgroundColor: colors.primary,
     borderRadius: radius.sm,
   },
-  freqBar: {
-    height: '100%',
-    backgroundColor: colors.success,
-    borderRadius: radius.sm,
-  },
-  volumeValue: {
-    width: 80,
-    fontSize: 11,
-    color: colors.textSecondary,
+  barValue: {
+    width: 70,
+    fontSize: 12,
+    color: colors.text,
     textAlign: 'right',
+    marginLeft: spacing.sm,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
 });

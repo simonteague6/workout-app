@@ -24,7 +24,7 @@ import ImportReviewScreen from '../screens/MoreTab/ImportReviewScreen.js';
 import OnboardingScreen from '../screens/MoreTab/OnboardingScreen.js';
 import DataScreen from '../screens/MoreTab/DataScreen.js';
 import { useAppTheme } from '../theme/index.js';
-import { useWorkoutStore } from '../stores/workoutStore.js';
+import { useWorkoutOperationsStore } from '../stores/workoutStore.js';
 import Icon from '../components/Icon.js';
 
 const BottomTab = createBottomTabNavigator();
@@ -173,7 +173,7 @@ function RestBadge() {
 }
 
 function WorkoutTabIcon({ color, size, focused }) {
-  const endsAt = useWorkoutStore((s) => s.restTimerEndsAt);
+  const endsAt = useWorkoutOperationsStore((s) => s.restTimerEndsAt);
   return (
     <View>
       <Icon name="dumbbell" size={size} color={color} strokeWidth={focused ? 2.4 : 2} />
