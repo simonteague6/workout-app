@@ -9,6 +9,17 @@
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
+// jest.fn() polyfill for Bun's test runner. Bun's `mock()` from bun:test
+// already supports the same API as jest.fn() (including mockResolvedValue,
+// mockResolvedValueOnce, etc.) and is recognized by toHaveBeenCalled* matchers.
+if (typeof globalThis.jest === 'undefined') {
+  try {
+    globalThis.jest = { fn: require('bun:test').mock };
+  } catch {
+    // Node/Jest — jest global already available via @jest/globals
+  }
+}
+
 import { sendAIRequest, sendAIRequestWithTools, supportsToolUse } from '../aiClient.js';
 
 const ORIGINAL_FETCH = global.fetch;
@@ -37,6 +48,10 @@ function mockFetchError(status, body) {
   );
 }
 
+
+beforeEach(() => {
+  global.fetch = ORIGINAL_FETCH;
+});
 afterEach(() => {
   global.fetch = ORIGINAL_FETCH;
 });

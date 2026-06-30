@@ -1,8 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
-import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
-
+import { createRequire } from 'node:module';
 import {
   createInMemoryDb,
   runMigrations,
@@ -11,6 +10,19 @@ import {
   LATEST_SCHEMA_VERSION,
 } from '../../utils/db.js';
 import { migrations } from '../../db/migrations/index.js';
+
+// Platform-aware raw SQLite connection for the drift-guard test that must run
+// schema.sql directly (multi-statement exec) without migrations.
+function createRawDatabase() {
+  const req = createRequire(import.meta.url);
+  try {
+    const { Database } = req('bun:sqlite');
+    return new Database(':memory:');
+  } catch {
+    const { DatabaseSync } = req('node:sqlite');
+    return new DatabaseSync(':memory:');
+  }
+}
 
 const EXPECTED_TABLES = [
   'muscle_group',
@@ -117,8 +129,8 @@ describe('migration runner', () => {
   });
 
   it('keeps migration 0001 in sync with schema.sql (drift guard)', () => {
-    // Apply schema.sql directly via node:sqlite exec (multi-statement).
-    const raw = new DatabaseSync(':memory:');
+    // Apply schema.sql directly via a raw in-memory connection (multi-statement exec).
+    const raw = createRawDatabase();
     // eslint-disable-next-line no-undef -- __dirname is a Node global; the RN eslint env doesn't define it.
     raw.exec(fs.readFileSync(path.resolve(__dirname, '../schema.sql'), 'utf8'));
     const rawTables = raw

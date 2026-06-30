@@ -7,9 +7,13 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 
 // Mock sendAIRequestWithTools so agentic tests can control its return value.
+// In Bun we skip the module mock (jest.mock() pollutes the shared module cache);
+// the real module works fine for non-agentic tests (fetch is mocked via global.fetch).
+// Agentic-mode tests currently require jest.mock() and are skipped in Bun.
+
 // sendAIRequest and supportsToolUse use inline implementations that mirror
 // the real module (calls fetch() which tests mock via global.fetch).
-jest.mock('../aiClient.js', () => {
+const _mockFactory = () => {
   const DEFAULT_BASE_URLS = Object.freeze({
     openai: 'https://api.openai.com/v1',
     openrouter: 'https://openrouter.ai/api/v1',
@@ -112,7 +116,14 @@ jest.mock('../aiClient.js', () => {
     sendAIRequestWithTools: mockSendWithTools,
     supportsToolUse,
   };
-});
+};
+
+// Module mocking: in Jest this scopes per-file; Bun 1.3's jest.mock()
+// pollutes the shared module cache. In Bun we skip the mock — the real
+// module works fine (fetch is mocked via global.fetch instead).
+if (typeof Bun === 'undefined') {
+  jest.mock('../aiClient.js', _mockFactory);
+}
 
 import { createInMemoryDb } from '../../utils/db.js';
 import { seedExercises } from '../../db/seed/seed.js';

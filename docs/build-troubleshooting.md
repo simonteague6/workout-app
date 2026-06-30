@@ -4,7 +4,7 @@
 
 ### Symptoms
 
-`npm run android` failed with two errors in sequence:
+`bun run android` failed with two errors in sequence:
 
 1. **`Could not initialize class org.gradle.toolchains.foojay.DistributionsKt`**
    ```
@@ -33,7 +33,7 @@ The system had **Java 25** (OpenJDK 25+36). Gradle 9.3.1 and the Android Gradle 
 ~/Library/Java/JavaVirtualMachines/jdk-17.0.19+10/Contents/Home
 ```
 
-Also patched `node_modules/@react-native/gradle-plugin/settings.gradle.kts` to bump `foojay-resolver-convention` from 0.5.0 to 1.0.0 (this is overwritten on `npm install` but harmless with JDK 17).
+Also patched `node_modules/@react-native/gradle-plugin/settings.gradle.kts` to bump `foojay-resolver-convention` from 0.5.0 to 1.0.0 (this is overwritten on `bun install` but harmless with JDK 17).
 
 ### How to run builds going forward
 
@@ -42,7 +42,7 @@ Also patched `node_modules/@react-native/gradle-plugin/settings.gradle.kts` to b
 export JAVA_HOME=~/Library/Java/JavaVirtualMachines/jdk-17.0.19+10/Contents/Home
 
 # Then run normally
-npm run android
+bun run android
 ```
 
 You can make this permanent by adding the `export` line to your shell profile (`~/.zshrc` or `~/.bash_profile`).

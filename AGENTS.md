@@ -45,19 +45,19 @@ src/
 
 ```bash
 # Create Expo project (not yet initialized)
-npx create-expo-app@latest . --template blank
+bunx create-expo-app@latest . --template blank
 
 # Run on Android
-npx expo start --android
+bun run android
 
 # Run tests (Jest)
-npm test
+bun test
 
 # Lint
-npm run lint
+bun run lint
 ```
 
-Package manager: **npm** (default with Expo). Runtime: **Node.js** (Expo managed workflow).
+Package manager: **bun**. Runtime: **Bun** (Expo managed workflow).
 
 ## Code Conventions & Common Patterns
 
@@ -170,11 +170,9 @@ Agents read `skill://tdd` before starting. Red-green-refactor per acceptance cri
 - React Navigation configuration
 
 ### Running tests
-```bash
-npm test                 # all tests
-npm test -- --watch      # watch mode
-npm test -- -t "workout"  # filter by name
-```
+bun test                 # all tests
+bun test --watch          # watch mode
+bun test -- -t "workout"  # filter by name
 
 ## Issue Workflow
 

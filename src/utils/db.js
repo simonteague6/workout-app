@@ -136,6 +136,56 @@ export class NodeSqliteAdapter {
 }
 
 // ---------------------------------------------------------------------------
+// bun:sqlite adapter (Bun runtime). Used in tests and any Bun script.
+// ---------------------------------------------------------------------------
+export class BunSqliteAdapter {
+  constructor(db) {
+    this._db = db;
+    this._db.exec('PRAGMA foreign_keys = ON');
+  }
+
+  execute(sql, params = []) {
+    if (returnsRows(sql)) {
+      const rows = this._db.query(sql).all(...params);
+      return { rows, rowsAffected: rows.length, insertId: null };
+    }
+    const r = this._db.run(sql, ...params);
+    return { rows: [], rowsAffected: r.changes, insertId: r.lastInsertRowid ?? null };
+  }
+
+  executeBatch(statements) {
+    let rowsAffected = 0;
+    for (const { sql, params = [] } of statements) {
+      if (returnsRows(sql)) {
+        rowsAffected += this._db.query(sql).all(...params).length;
+      } else {
+        rowsAffected += this._db.run(sql, ...params).changes;
+      }
+    }
+    return { rowsAffected };
+  }
+
+  transaction(fn) {
+    this._db.exec('BEGIN');
+    try {
+      fn();
+      this._db.exec('COMMIT');
+    } catch (err) {
+      try { this._db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+      throw err;
+    }
+  }
+
+  exec(sql) {
+    this._db.exec(sql);
+  }
+
+  close() {
+    this._db.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // op-sqlite adapter (React Native / Expo). Loaded lazily so Node never
 // evaluates the native import.
 // ---------------------------------------------------------------------------
@@ -187,7 +237,7 @@ export class OpSqliteAdapter {
 
 // ---------------------------------------------------------------------------
 // Connection factory (platform-aware). Tries op-sqlite; falls back to
-// node:sqlite in Node (tests / build scripts).
+// bun:sqlite (Bun), then node:sqlite (Node — tests / build scripts).
 // ---------------------------------------------------------------------------
 function requireOpSqlite() {
   // Lazily require so Node (which cannot load the native module) never imports it.
@@ -202,6 +252,11 @@ function loadNodeSqlite() {
   return require('node:sqlite');
 }
 
+function loadBunSqlite() {
+  // Bun-only built-in. `bun:sqlite` provides the SQLite bindings in Bun.
+  return require('bun:sqlite');
+}
+
 let _shared = null;
 
 export function openDatabase({ name = 'workout.db', location } = {}) {
@@ -210,10 +265,17 @@ export function openDatabase({ name = 'workout.db', location } = {}) {
     const db = open({ name, location: location ?? 'databases' });
     return new OpSqliteAdapter(db);
   } catch {
-    // Node path: in-memory for tests, file by name for build scripts.
-    const { DatabaseSync } = loadNodeSqlite();
-    const target = location === ':memory:' || name === ':memory:' ? ':memory:' : name;
-    return new NodeSqliteAdapter(new DatabaseSync(target));
+    // Bun path: in-memory for tests, file by name for build scripts.
+    try {
+      const { Database } = loadBunSqlite();
+      const target = location === ':memory:' || name === ':memory:' ? ':memory:' : name;
+      return new BunSqliteAdapter(new Database(target));
+    } catch {
+      // Node path: in-memory for tests, file by name for build scripts.
+      const { DatabaseSync } = loadNodeSqlite();
+      const target = location === ':memory:' || name === ':memory:' ? ':memory:' : name;
+      return new NodeSqliteAdapter(new DatabaseSync(target));
+    }
   }
 }
 
@@ -276,8 +338,15 @@ export function resetDatabaseForTesting() {
 
 // Test helper: an isolated in-memory database with migrations applied.
 export function createInMemoryDb() {
-  const { DatabaseSync } = loadNodeSqlite();
-  const db = new NodeSqliteAdapter(new DatabaseSync(':memory:'));
-  runMigrations(db);
-  return db;
+  try {
+    const { Database } = loadBunSqlite();
+    const db = new BunSqliteAdapter(new Database(':memory:'));
+    runMigrations(db);
+    return db;
+  } catch {
+    const { DatabaseSync } = loadNodeSqlite();
+    const db = new NodeSqliteAdapter(new DatabaseSync(':memory:'));
+    runMigrations(db);
+    return db;
+  }
 }
